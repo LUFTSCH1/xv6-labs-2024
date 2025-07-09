@@ -18,10 +18,15 @@ user/usys.S
 *.zip
 xv6.out*
 .vagrant/
+.cache/
+__pycache__/
 submissions/
+.vscode/
+*.pdf
 ph
 barrier
 /lab-*.json
 .DS_Store
 *.dSYM
 *.pcap
+compile_commands.json
