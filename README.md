@@ -117,9 +117,9 @@ make qemu
 
 | 系统调用 | 解释 |
 | :-- | :-- |
-| `int fork()` | 创建一个子进程（当前进程的完整副本）；返回其PID（若本身为`fork()`子进程，返回0；错误时返回-1） |
+| `int fork()` | 创建一个子进程（当前进程的完整副本）；返回其PID（若本身为`fork()`产生的子进程，返回0；错误时返回-1） |
 | `int exit(int status)` | 终止当前进程；`status`报告给`wait()`；返回指令不会被执行，故实际无返回值 |
-| `int wait(int *status)` | 等待子进程退出；退出状态存在`*status`；返回值为子进程PID |
+| `int wait(int *status)` | 等待子进程退出；退出状态存在`*status`（`status`为`(int *)0`表示不关心子进程退出状态）；返回值为子进程PID |
 | `int kill(int pid)` | 根据传入的PID终止对应进程；返回值为0或-1（错误） |
 | `int getpid()` | 返回值为当前进程的PID |
 | `int sleep(int n)` | 暂停n个时钟节拍；总是返回0 |
@@ -142,9 +142,16 @@ make qemu
 
 ### sleep（`user/sleep.c` 难度：easy）  
 
-**题目**：为`xv6`提供一个用户级工具`sleep`，类似`UNIX`中的`sleep`命令。你的`sleep`工具应该暂停用户指定的时钟节拍数（节拍是`xv6`内核定义的时间概念，即定时器芯片两次中断之间的时间间隔）你的解决方案应位于文件`user/sleep.c`中。  
+#### 题目  
 
-在`user`目录中新建`sleep.c`文件，代码如下：
+为`xv6`提供一个用户级工具`sleep`，类似`UNIX`中的`sleep`命令。你的`sleep`工具应该暂停用户指定的时钟节拍数（节拍是`xv6`内核定义的时间概念，即定时器芯片两次中断之间的时间间隔）你的解决方案应位于文件`user/sleep.c`中。  
+
+#### 简要分析  
+
+本题没什么注意点，只需要从参数中拿到用户指定的时钟节拍数，直接传给`sleep`系统调用即可。提示中说明从数字字符串转换为整型变量可以用`int atoi(const char *s)`（定义位于`user/ulib.c`），从其实现可以看出：转换失败返回0，成功返回一个正数。  
+
+#### 代码  
+
 ```c
 #include "kernel/types.h"
 #include "kernel/stat.h"
@@ -166,9 +173,11 @@ main(int argc, char *argv[]) {
 }
 ```
 
+#### 本题额外说明  
+
 接着在项目根目录`Makefile`文件第180行的`UPROGS`项下追加：
 ```makefile
-$U/_sleep\
+$U/_sleep\ # 即 $U/_{不带.c后缀的文件名}\
 ```
 保存后使用前面提到的`make qemu`命令构建即可。  
 
@@ -187,6 +196,8 @@ chmod +x ./grade-lab-util
 
 **题目**：编写一个用户级程序，使用`xv6`系统调用通过一对管道在两个进程之间“ping pong”发送一个字节。父进程应向子进程发送一个字节；子进程应打印“`<pid>: received ping`”（其中`<pid>`是子进程PID），并将该字节通过管道写入父进程，然后退出；父进程应从子进程读取该字节，打印“`<pid>: received pong`”（其中`<pid>`是父进程PID），然后退出。你的解决方案应位于文件`user/pingpong.c`中。  
 
+先来了解`xv6`的`pipe`、以及`fork()`机制
+
 ```c
 #include "kernel/types.h"
 #include "kernel/stat.h"
@@ -194,55 +205,43 @@ chmod +x ./grade-lab-util
 
 #define stderr (2)
 
-static char buf[4] = "";
-
-static void
-closepipe(int p[]) {
-  close(p[0]);
-  close(p[1]);
-  p[0] = 0;
-  p[1] = 0;
-}
-
 int
 main(void) {
-  // pwcr父写子读，prcw父读子写
-  int pwcr[2], prcw[2];
+  // 虽然一个管道也能完成，但题目要求一对管道，每个负责一个方向
+  int pwcr[2], prcw[2]; // pwcr父写子读，prcw父读子写
   if (pipe(pwcr)) {
     fprintf(stderr, "failed to create pipe\n");
     exit(1);
   }
   if (pipe(prcw)) {
     fprintf(stderr, "failed to create pipe\n");
-    closepipe(pwcr);
+    close(pwcr[0]), close(pwcr[1]);
     exit(1);
   }
 
-  const int pid = fork();
+  const int pid = fork(); // 尝试创建子进程
   if (pid < 0) {
     fprintf(stderr, "failed to fork\n");
+    close(pwcr[0]), close(pwcr[1]);
+    close(pwcr[0]), close(pwcr[1]);
     exit(1);
   }
+
+  char data = 0; // 一字节数据
+
   if (pid == 0) {
-    read(pwcr[0], buf, 1);
+    close(pwcr[1]), close(prcw[0]); // 关闭子进程不需要的端
+    read(pwcr[0], &data, 1), close(pwcr[0]); // 子进程读后关闭pwcr读端
     printf("%d: received ping\n", getpid());
-    write(prcw[1], buf, 1);
+    write(prcw[1], &data, 1), close(prcw[1]); // 子进程写后关闭prcw写端
     exit(0);
   }
-  write(pwcr[1], "d", 1);
-  {
-    int child_status;
-    wait(&child_status);
-    if (child_status) {
-      fprintf(stderr, "child exit error\n");
-      closepipe(pwcr), closepipe(prcw);
-      exit(1);
-    }
-  }
-  read(prcw[0], buf, 1);
+  close(pwcr[0]), close(prcw[1]); // 关闭父进程不需要的端
+  write(pwcr[1], "d", 1), close(pwcr[1]); // 父进程写后关闭pwcr写端
+  wait((int *)0); // 等待子进程退出，fork()成功后退出status一定为0，不用关心状态
+  read(prcw[0], &data, 1), close(prcw[0]); // 父进程读后关闭prcw读端
   printf("%d: received pong\n", getpid());
 
-  closepipe(pwcr), closepipe(prcw);
   exit(0);
 }
 ```
