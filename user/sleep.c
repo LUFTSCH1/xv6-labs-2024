@@ -2,13 +2,12 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-#define stderr (2)
-
 int
-main(int argc, char *argv[]) {
+main(int argc, char *argv[])
+{
   int interval;
   if (argc != 2 || (interval = atoi(argv[1])) <= 0) {
-    fprintf(stderr, "Usage: %s <positive_integer_interval>\n", argv[0]);
+    fprintf(2, "Usage: %s <positive_integer_interval>\n", argv[0]);
     exit(1);
   }
 
