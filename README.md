@@ -114,30 +114,30 @@ make qemu
 ```
 依照实验指导，在项目根目录下输入以上命令来构建。完成构建则会自动启动`xv6`内核，按`Ctrl+A`后按`X`可以退出`QEMU`，回到Linux系统中。  
 
-## 实验系统调用  
+## 实验系统调用（`user/user.h`）  
 
 | 系统调用 | 解释 |
 | :-- | :-- |
-| `int fork()` | 创建一个子进程（当前进程的完整副本）；返回其PID（若本身为`fork()`产生的子进程，返回0；错误时返回-1） |
-| `int exit(int status)` | 终止当前进程；`status`报告给`wait()`；返回指令不会被执行，故实际无返回值 |
+| `int fork(void)` | 创建一个子进程（当前进程的完整副本）；返回其PID（若本身为`fork()`产生的子进程，返回0；错误时返回-1） |
+| `int exit(int status) __attribute__((noreturn))` | 终止当前进程；`status`报告给`wait()`；返回指令不会被执行，故实际无返回值 |
 | `int wait(int *status)` | 等待子进程退出；退出状态存在`*status`（`status`为`(int *)0`表示不关心子进程退出状态）；返回值为子进程PID |
 | `int kill(int pid)` | 根据传入的PID终止对应进程；返回值为0或-1（错误） |
-| `int getpid()` | 返回值为当前进程的PID |
+| `int getpid(void)` | 返回值为当前进程的PID |
 | `int sleep(int n)` | 暂停n个时钟节拍；总是返回0 |
-| `int exec(char *file, char *argv[])` | 加载`file`路径对应文件并用给定的`argv`参数表执行；成功时当前进程空间被覆盖，无返回，失败返回-1 |
+| `int exec(const char *file, char **argv)` | 加载`file`路径对应文件并用给定的`argv`参数表执行；成功时当前进程空间被覆盖，无返回，失败返回-1 |
 | `char *sbrk(int n)` | `n`为0时仅查询堆顶，返回当前堆结束地址；`n`为正时扩展堆空间，返回原堆顶地址；`n`为负时收缩堆空间，返回原堆顶地址；执行失败返回`(char *)-1` |
-| `int open(char *file, int flags)` | 打开`file`路径对应文件，`flags`为打开模式，有`O_RDONLY`、`O_WRONLY`、`O_RDWR`、`O_CREATE`和`O_TRUNC`及其组合（按位或进行组合）；成功返回文件描述符（正数），失败返回-1 |
-| `int write(int fd, char *buf, int n)` | 向文件描述符`fd`写入`buf`开始的`n`字节数据；返回n |
-| `int read(int fd, char *buf, int n)` | 从文件描述符`fd`读取`n`字节数据存入`buf`；返回读取字节数，如已到文件末尾返回0 |
+| `int open(const char *file, int flags)` | 打开`file`路径对应文件，`flags`为打开模式，有`O_RDONLY`、`O_WRONLY`、`O_RDWR`、`O_CREATE`和`O_TRUNC`及其组合（按位或进行组合）；成功返回文件描述符（正数），失败返回-1 |
+| `int write(int fd, const void *buf, int n)` | 向文件描述符`fd`写入`buf`开始的`n`字节数据；返回n |
+| `int read(int fd, void *buf, int n)` | 从文件描述符`fd`读取`n`字节数据存入`buf`；返回读取字节数，如已到文件末尾返回0 |
 | `int close(int fd)` | 释放打开的文件`fd`；成功返回0，失败返回-1 |
 | `int dup(int fd)` | 返回和`fd`指向相同文件的新文件描述符 |
-| `int pipe(int p[])` | 创建一个管道，将读、写文件描述符分别放入`p[0]`、`p[1]`；创建成功返回0，失败返回-1 |
-| `int chdir(char *dir)` | 修改当前进程的工作目录；成功返回0，失败返回-1 |
-| `int mkdir(char *dir)` | 新建目录；成功返回0，失败返回-1 |
-| `int mknod(char *file, int major, int minor)` | 创建设备文件，`file`为设备文件路径，`major`为主设备号（标识设备类型），`minor`为次设备号（标识具体设备实例）；成功返回0，失败返回-1 |
+| `int pipe(int *p)` | 创建一个管道，将读、写文件描述符分别放入`p[0]`、`p[1]`；创建成功返回0，失败返回-1 |
+| `int chdir(const char *dir)` | 修改当前进程的工作目录；成功返回0，失败返回-1 |
+| `int mkdir(const char *dir)` | 新建目录；成功返回0，失败返回-1 |
+| `int mknod(const char *file, short major, short minor)` | 创建设备文件，`file`为设备文件路径，`major`为主设备号（标识设备类型），`minor`为次设备号（标识具体设备实例）；成功返回0，失败返回-1 |
 | `int fstat(int fd, struct stat *st)` | 查询`fd`对应文件元数据存入`*st`；成功返回0，失败返回-1 |
-| `int link(char *file1, char *file2)` | 为`file1`创建别名（硬链接）`file2`；成功返回0，失败返回-1 |
-| `int unlink(char *file)` | 删除文件链接；成功返回0，失败返回-1 |
+| `int link(const char *file1, const char *file2)` | 为`file1`创建别名（硬链接）`file2`；成功返回0，失败返回-1 |
+| `int unlink(const char *file)` | 删除文件链接；成功返回0，失败返回-1 |
 
 ## Lab Utilities（git checkout util）  
 
@@ -160,13 +160,12 @@ make qemu
 #include "kernel/stat.h"
 #include "user/user.h"
 
-#define stderr (2)
-
 int
-main(int argc, char *argv[]) {
+main(int argc, char *argv[])
+{
   int interval;
   if (argc != 2 || (interval = atoi(argv[1])) <= 0) {
-    fprintf(stderr, "Usage: %s <positive_integer_interval>\n", argv[0]);
+    fprintf(2, "Usage: %s <positive_integer_interval>\n", argv[0]);
     exit(1);
   }
 
@@ -216,42 +215,44 @@ chmod +x ./grade-lab-util
 #include "kernel/stat.h"
 #include "user/user.h"
 
-#define stderr (2)
+#define  PREAD (0)
+#define PWRITE (1)
+
+static void errquit(int, const char *) __attribute__((noreturn));
+
+static void
+errquit(const int status, const char prompt[])
+{
+  fprintf(2, "%s\n", prompt);
+  exit(status);
+}
 
 int
-main(void) {
+main(int argc, char *argv[])
+{
   // 虽然一个管道也能完成，但题目要求一对管道，每个负责一个方向
   int pwcr[2], prcw[2]; // pwcr父写子读，prcw父读子写
-  if (pipe(pwcr)) {
-    fprintf(stderr, "failed to create pipe\n");
-    exit(1);
-  }
-  if (pipe(prcw)) {
-    fprintf(stderr, "failed to create pipe\n");
-    close(pwcr[0]), close(pwcr[1]);
-    exit(1);
+  if (pipe(pwcr) || pipe(prcw)) {
+    errquit(1,"failed to create pipe");
   }
 
   const int pid = fork(); // 尝试创建子进程
   if (pid < 0) {
-    fprintf(stderr, "failed to fork\n");
-    close(pwcr[0]), close(pwcr[1]);
-    close(pwcr[0]), close(pwcr[1]);
-    exit(1);
+    errquit(1, "failed to fork");
   }
 
   char data = 0; // 一字节数据
 
   if (pid == 0) {
-    close(pwcr[1]), close(prcw[0]); // 关闭子进程不需要的端
-    read(pwcr[0], &data, 1), close(pwcr[0]); // 子进程读后关闭pwcr读端
+    close(pwcr[PWRITE]), close(prcw[PREAD]); // 关闭子进程不需要的端
+    read(pwcr[PREAD], &data, 1), close(pwcr[PREAD]); // 子进程读后关闭pwcr读端
     printf("%d: received ping\n", getpid());
-    write(prcw[1], &data, 1), close(prcw[1]); // 子进程写后关闭prcw写端
+    write(prcw[PWRITE], &data, 1), close(prcw[PWRITE]); // 子进程写后关闭prcw写端
   } else {
-    close(pwcr[0]), close(prcw[1]); // 关闭父进程不需要的端
-    write(pwcr[1], "d", 1), close(pwcr[1]); // 父进程写后关闭pwcr写端
+    close(pwcr[PREAD]), close(prcw[PWRITE]); // 关闭父进程不需要的端
+    write(pwcr[PWRITE], "d", 1), close(pwcr[PWRITE]); // 父进程写后关闭pwcr写端
     wait((int *)0); // 等待子进程退出，fork()成功后退出status一定为0，不用关心状态
-    read(prcw[0], &data, 1), close(prcw[0]); // 父进程读后关闭prcw读端
+    read(prcw[PREAD], &data, 1), close(prcw[PREAD]); // 父进程读后关闭prcw读端
     printf("%d: received pong\n", getpid());
   }
 
@@ -265,3 +266,95 @@ main(void) {
 
 用管道为`xv6`编写一个并行素数筛程序。使用`pipe`和`fork`来设置管道，第一个进程将2到280间的数送入管道。对于每个素数，你需要创建一个进程，该进程通过一个管道从其左侧相邻进程读取数据，并通过另一个管道写入其右侧相邻的进程。由于`xv6`的文件描述符和进程数量有限，因此第一个进程可以在280处停止。你的解决方案应位于文件`user/primes.c`中。  
 
+#### 简要分析  
+
+本题可以采用埃氏筛进行实现。每个管道视为一个序列，顺序为数写入的先后（从小到大写入）。主进程显然有一个2-280的序列，然后进行筛除。每次取出序列首的数，这一定是当前序列中最小的质数，然后将序列中不能被该数整除的数按顺序复制进新的序列（新管道），直到序列为空。  
+
+#### 代码  
+
+```c
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "user/user.h"
+
+#define  PREAD (0)
+#define PWRITE (1)
+#define INT_SIZE sizeof(int)
+#define UPPER_REALM (280)
+
+static void errquit(int, const char *) __attribute__((noreturn));
+static void prime(int) __attribute__((noreturn));
+
+static const char S_EXCE_PIPE[] = "failed to create pipe";
+static const char S_EXCE_FORK[] = "failed to fork";
+
+static void
+errquit(const int status, const char prompt[])
+{
+  fprintf(2, "%s\n", prompt);
+  exit(status);
+}
+
+static void
+prime(const int rfd)
+{
+  int pri;
+  if (read(rfd, &pri, INT_SIZE) != INT_SIZE) {
+    close(rfd);
+    exit(0);
+  }
+  printf("prime %d\n", pri);
+
+  int nxtpipe[2];
+  if (pipe(nxtpipe)) {
+    errquit(1, S_EXCE_PIPE);
+  }
+  const int pid = fork();
+  if (pid < 0) {
+    errquit(1, S_EXCE_FORK);
+  }
+
+  if (pid == 0) {
+    close(rfd), close(nxtpipe[PWRITE]);
+    prime(nxtpipe[PREAD]);
+  } else {
+    close(nxtpipe[PREAD]);
+    for (int n; read(rfd, &n, INT_SIZE) == INT_SIZE; ) {
+      if (n % pri) {
+        write(nxtpipe[PWRITE], &n, INT_SIZE);
+      }
+    }
+    close(rfd), close(nxtpipe[PWRITE]);
+    int cstatus;
+    wait(&cstatus);
+    exit(cstatus);
+  }
+}
+
+int
+main(int argc, char *argv[])
+{
+  int fds[2];
+  if (pipe(fds)) {
+    errquit(1, S_EXCE_PIPE);
+  }
+
+  const int pid = fork();
+  if (pid < 0) {
+    errquit(1, S_EXCE_FORK);
+  }
+
+  if (pid == 0) {
+    close(fds[PWRITE]);
+    prime(fds[PREAD]);
+  }
+  close(fds[PREAD]);
+  for (int i = 2; i <= UPPER_REALM; ++i) {
+    write(fds[PWRITE], &i, INT_SIZE);
+  }
+  close(fds[PWRITE]);
+  int cstatus;
+  wait(&cstatus);
+  exit(cstatus);
+}
+```
