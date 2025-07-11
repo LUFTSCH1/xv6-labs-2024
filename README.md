@@ -160,9 +160,7 @@ make qemu
 #include "kernel/stat.h"
 #include "user/user.h"
 
-int
-main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   int interval;
   if (argc != 2 || (interval = atoi(argv[1])) <= 0) {
     fprintf(2, "Usage: %s <positive_integer_interval>\n", argv[0]);
@@ -220,16 +218,12 @@ chmod +x ./grade-lab-util
 
 static void errquit(int, const char *) __attribute__((noreturn));
 
-static void
-errquit(const int status, const char prompt[])
-{
+static void errquit(const int status, const char prompt[]) {
   fprintf(2, "%s\n", prompt);
   exit(status);
 }
 
-int
-main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   // 虽然一个管道也能完成，但题目要求一对管道，每个负责一个方向
   int pwcr[2], prcw[2]; // pwcr父写子读，prcw父读子写
   if (pipe(pwcr) || pipe(prcw)) {
@@ -255,7 +249,6 @@ main(int argc, char *argv[])
     read(prcw[PREAD], &data, 1), close(prcw[PREAD]); // 父进程读后关闭prcw读端
     printf("%d: received pong\n", getpid());
   }
-
   exit(0);
 }
 ```
@@ -268,7 +261,7 @@ main(int argc, char *argv[])
 
 #### 简要分析  
 
-本题可以采用埃氏筛进行实现。每个管道视为一个序列，顺序为数写入的先后（从小到大写入）。主进程显然有一个2-280的序列，然后进行筛除。每次取出序列首的数，这一定是当前序列中最小的质数，然后将序列中不能被该数整除的数按顺序复制进新的序列（新管道），直到序列为空。  
+本题可以采用埃氏筛进行实现。每个管道视为一个序列，顺序为数写入的先后（从小到大写入）。主进程显然有一个2-280的序列，然后进行筛除。每次取出并打印序列首的数，这一定是当前序列中最小的质数，然后将序列中不能被该数整除的数按顺序复制进新的序列（新管道）；重复上述过程，直到序列为空。  
 
 #### 代码  
 
@@ -288,16 +281,12 @@ static void prime(int) __attribute__((noreturn));
 static const char S_EXCE_PIPE[] = "failed to create pipe";
 static const char S_EXCE_FORK[] = "failed to fork";
 
-static void
-errquit(const int status, const char prompt[])
-{
+static void errquit(const int status, const char prompt[]) {
   fprintf(2, "%s\n", prompt);
   exit(status);
 }
 
-static void
-prime(const int rfd)
-{
+static void prime(const int rfd) {
   int pri;
   if (read(rfd, &pri, INT_SIZE) != INT_SIZE) {
     close(rfd);
@@ -317,23 +306,20 @@ prime(const int rfd)
   if (pid == 0) {
     close(rfd), close(nxtpipe[PWRITE]);
     prime(nxtpipe[PREAD]);
-  } else {
-    close(nxtpipe[PREAD]);
-    for (int n; read(rfd, &n, INT_SIZE) == INT_SIZE; ) {
-      if (n % pri) {
-        write(nxtpipe[PWRITE], &n, INT_SIZE);
-      }
-    }
-    close(rfd), close(nxtpipe[PWRITE]);
-    int cstatus;
-    wait(&cstatus);
-    exit(cstatus);
   }
+  close(nxtpipe[PREAD]);
+  for (int n; read(rfd, &n, INT_SIZE) == INT_SIZE; ) {
+    if (n % pri) {
+      write(nxtpipe[PWRITE], &n, INT_SIZE);
+    }
+  }
+  close(rfd), close(nxtpipe[PWRITE]);
+  int cstatus;
+  wait(&cstatus);
+  exit(cstatus);
 }
 
-int
-main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   int fds[2];
   if (pipe(fds)) {
     errquit(1, S_EXCE_PIPE);
@@ -358,3 +344,13 @@ main(int argc, char *argv[])
   exit(cstatus);
 }
 ```
+
+### find（`user/find.c` 难度：中等）  
+
+#### 题目  
+
+为`xv6`写一个简化的`UNIX` `find`程序：查找目录树中所有指定名称的文件，你的解决方案应位于文件`user/find.c`中。  
+
+#### 简要分析  
+
+需要阅读`user/ls.h`来了解如何读取目录。
