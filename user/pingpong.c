@@ -7,16 +7,12 @@
 
 static void errquit(int, const char *) __attribute__((noreturn));
 
-static void
-errquit(const int status, const char prompt[])
-{
+static void errquit(const int status, const char prompt[]) {
   fprintf(2, "%s\n", prompt);
   exit(status);
 }
 
-int
-main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   // 虽然一个管道也能完成，但题目要求一对管道，每个负责一个方向
   int pwcr[2], prcw[2]; // pwcr父写子读，prcw父读子写
   if (pipe(pwcr) || pipe(prcw)) {
@@ -42,6 +38,5 @@ main(int argc, char *argv[])
     read(prcw[PREAD], &data, 1), close(prcw[PREAD]); // 父进程读后关闭prcw读端
     printf("%d: received pong\n", getpid());
   }
-
   exit(0);
 }
