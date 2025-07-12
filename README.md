@@ -235,18 +235,18 @@ int main(int argc, char *argv[]) {
     errquit(1, "failed to fork");
   }
 
-  char data = 0; // 一字节数据
+  uint8 data = 0; // 一字节数据
 
   if (pid == 0) {
     close(pwcr[PWRITE]), close(prcw[PREAD]); // 关闭子进程不需要的端
-    read(pwcr[PREAD], &data, 1), close(pwcr[PREAD]); // 子进程读后关闭pwcr读端
+    read(pwcr[PREAD], &data, sizeof(data)), close(pwcr[PREAD]); // 子进程读后关闭pwcr读端
     printf("%d: received ping\n", getpid());
-    write(prcw[PWRITE], &data, 1), close(prcw[PWRITE]); // 子进程写后关闭prcw写端
+    write(prcw[PWRITE], &data, sizeof(data)), close(prcw[PWRITE]); // 子进程写后关闭prcw写端
   } else {
     close(pwcr[PREAD]), close(prcw[PWRITE]); // 关闭父进程不需要的端
-    write(pwcr[PWRITE], "d", 1), close(pwcr[PWRITE]); // 父进程写后关闭pwcr写端
+    write(pwcr[PWRITE], "d", sizeof(data)), close(pwcr[PWRITE]); // 父进程写后关闭pwcr写端
     wait((int *)0); // 等待子进程退出，fork()成功后退出status一定为0，不用关心状态
-    read(prcw[PREAD], &data, 1), close(prcw[PREAD]); // 父进程读后关闭prcw读端
+    read(prcw[PREAD], &data, sizeof(data)), close(prcw[PREAD]); // 父进程读后关闭prcw读端
     printf("%d: received pong\n", getpid());
   }
   exit(0);
@@ -353,4 +353,228 @@ int main(int argc, char *argv[]) {
 
 #### 简要分析  
 
-需要阅读`user/ls.h`来了解如何读取目录。
+需要阅读`user/ls.h`来了解如何读取目录。  
+
+#### 代码  
+
+```c
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "kernel/fcntl.h"
+#include "kernel/fs.h"
+#include "user/user.h"
+
+static void errquit(int, const char *) __attribute__((noreturn));
+
+static char buf[512];
+static const char *dst;
+
+static void errquit(const int status, const char prompt[]) {
+  fprintf(2, "%s\n", prompt);
+  exit(status);
+}
+
+static void checkroot(const char *const root) {
+  const int fd = open(root, O_RDONLY);
+  if (fd < 0) {
+    errquit(1, "failed to open root_directory");
+  }
+  struct stat st;
+  if (fstat(fd, &st) < 0) {
+    errquit(1, "failed to stat root_directory");
+  }
+  if (st.type != T_DIR) {
+    errquit(1, "root_directory must be a directory");
+  }
+  close(fd);
+}
+
+static void find(char *cur_end, int depth) {
+  if (cur_end - buf + 1 + DIRSIZ + 1 > sizeof(buf)) {
+    fprintf(2, "path too long\n");
+    return;
+  }
+  const int fd = open(buf, O_RDONLY);
+  if (fd < 0) {
+    fprintf(2, "cannot open\n");
+    return;
+  }
+  
+  int not_find = 1;
+  *cur_end++ = '/';
+  for (struct dirent de; read(fd, &de, sizeof(de)) == sizeof(de); ) {
+    // 排除空目录项、当前目录、父目录
+    if (de.inum == 0 || !strcmp(de.name, ".") || !strcmp(de.name, "..")) {
+      continue;
+    }
+    strcpy(cur_end, de.name);
+    struct stat st;
+    if (stat(buf, &st) < 0) {
+      fprintf(2, "cannot stat\n");
+      continue;
+    }
+    if (not_find && st.type == T_FILE) {
+      if (!(not_find = strcmp(de.name, dst))) {
+        printf("%s\n", buf);
+      }
+    } else if (st.type == T_DIR) {
+      find(cur_end + strlen(de.name), depth + 1);
+    }
+  }
+  close(fd);
+}
+
+int main(int argc, char *argv[]) {
+  if (argc != 2 && argc != 3) {
+    fprintf(
+      2,
+      "Usage: %s [root_directory] <file_name>\n"
+      "  Default root_directory is \".\"\n",
+      argv[0]
+    );
+    exit(1);
+  }
+
+  if (argc == 2) {
+    strcpy(buf, ".");
+    dst = argv[1];
+  } else {
+    strcpy(buf, argv[1]);
+    dst = argv[2];
+  }
+  checkroot(buf);
+  find(buf + strlen(buf), 0);
+  exit(0);
+}
+```
+
+### xargs（`user/xargs.c` 难度：中等）  
+
+#### 题目  
+
+为 xv6 编写一个 UNIX xargs 程序的简单版本：它的参数描述一个要运行的命令，它从标准输入读取一行，然后逐行运行该命令，并将该行附加到命令的参数中。你的解决方案应位于文件`user/xargs.c`中。  
+
+#### 简要分析  
+
+#### 代码  
+
+```c
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "kernel/param.h"
+#include "user/user.h"
+
+#define MAXLEN (1024)
+
+enum argst {
+  ARGST_CUT,
+  ARGST_NORMAL,
+  ARGST_LAST
+};
+
+static void errquit(int, const char *) __attribute__((noreturn));
+
+static void errquit(const int status, const char prompt[]) {
+  fprintf(2, "%s\n", prompt);
+  exit(status);
+}
+
+static int getchar(void) {
+  char ch;
+  if (read(0, &ch, sizeof(ch)) != sizeof(ch)) {
+    return 0;
+  }
+  return ch;
+}
+
+static void clearline(void) {
+  int ch;
+  do {
+    ch = getchar();
+  } while (ch != 0 && ch != '\n');
+}
+
+static int readarg(char *const buf, int maxsize, enum argst *const st) {
+  --maxsize;
+  *st = ARGST_NORMAL;
+  int ch;
+  do {
+    ch = getchar();
+  } while (ch == ' ' || ch == '\t');
+  if (ch == 0) {
+    return 0;
+  }
+  char *p = buf;
+  do {
+    if (ch == '\n') {
+      *st = ARGST_LAST;
+      break;
+    }
+    if (p - buf >= maxsize) {
+      *st = ARGST_CUT;
+      return 0;
+    }
+    *p++ = (char)ch;
+    ch = getchar();
+  } while (ch != 0 && ch != ' ' && ch != '\t');
+  *p = '\0';
+  return p - buf;
+}
+
+int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    fprintf(2, "Usage: xargs <command> [initial-args...]\n");
+    exit(1);
+  }
+
+  char *exec_argv[MAXARG];
+  for (int i = 1; i < argc; ++i) {
+    exec_argv[i - 1] = argv[i];
+  }
+  const int base = argc - 1;
+
+  while (1) {
+    char buf[MAXLEN];
+    {
+      char *p = buf;
+      enum argst st;
+      int len, rest = MAXLEN, pos = base;
+      while ((len = readarg(p, rest, &st))) {
+        exec_argv[pos] = p;
+        if (st == ARGST_CUT || pos >= MAXARG - 1) {
+          if (st == ARGST_NORMAL) {
+            clearline();
+          }
+          st = ARGST_CUT;
+          break;
+        }
+        ++pos;
+        p += len + 1;
+        rest -= len + 1;
+        if (st == ARGST_LAST) {
+          break;
+        }
+      }
+      if (p == buf) {
+        break;
+      }
+      if (st == ARGST_CUT) {
+        fprintf(2, "line args too long\n");
+        continue;
+      }
+      exec_argv[pos] = (char *)0;
+    }
+
+    const int pid = fork();
+    if (pid < 0) {
+      errquit(1, "failed to fork");
+    }
+    if (pid == 0) {
+      exec(exec_argv[0], exec_argv);
+      errquit(1, "failed to exec");
+    }
+    wait((int *)0);
+  }
+  exit(0);
+}
+```
