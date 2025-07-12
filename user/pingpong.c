@@ -24,18 +24,18 @@ int main(int argc, char *argv[]) {
     errquit(1, "failed to fork");
   }
 
-  char data = 0; // 一字节数据
+  uint8 data = 0; // 一字节数据
 
   if (pid == 0) {
     close(pwcr[PWRITE]), close(prcw[PREAD]); // 关闭子进程不需要的端
-    read(pwcr[PREAD], &data, 1), close(pwcr[PREAD]); // 子进程读后关闭pwcr读端
+    read(pwcr[PREAD], &data, sizeof(data)), close(pwcr[PREAD]); // 子进程读后关闭pwcr读端
     printf("%d: received ping\n", getpid());
-    write(prcw[PWRITE], &data, 1), close(prcw[PWRITE]); // 子进程写后关闭prcw写端
+    write(prcw[PWRITE], &data, sizeof(data)), close(prcw[PWRITE]); // 子进程写后关闭prcw写端
   } else {
     close(pwcr[PREAD]), close(prcw[PWRITE]); // 关闭父进程不需要的端
-    write(pwcr[PWRITE], "d", 1), close(pwcr[PWRITE]); // 父进程写后关闭pwcr写端
+    write(pwcr[PWRITE], "d", sizeof(data)), close(pwcr[PWRITE]); // 父进程写后关闭pwcr写端
     wait((int *)0); // 等待子进程退出，fork()成功后退出status一定为0，不用关心状态
-    read(prcw[PREAD], &data, 1), close(prcw[PREAD]); // 父进程读后关闭prcw读端
+    read(prcw[PREAD], &data, sizeof(data)), close(prcw[PREAD]); // 父进程读后关闭prcw读端
     printf("%d: received pong\n", getpid());
   }
   exit(0);
