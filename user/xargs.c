@@ -98,8 +98,7 @@ int main(int argc, char *argv[]) {
         break;
       }
       if (st == ARGST_CUT) {
-        fprintf(2, "line args too long\n");
-        continue;
+        errquit(1, "line too long, exec ended");
       }
       exec_argv[pos] = (char *)0;
     }
