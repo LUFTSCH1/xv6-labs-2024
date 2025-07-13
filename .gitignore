@@ -25,3 +25,8 @@ barrier
 .DS_Store
 *.dSYM
 *.pcap
+.vscode/
+.cache/
+__pycache__/
+compile_commands.json
+*.pdf
