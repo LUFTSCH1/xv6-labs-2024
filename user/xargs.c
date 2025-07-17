@@ -96,7 +96,11 @@ int main(int argc, char *argv[]) {
       exec(exec_argv[0], exec_argv);
       errquit(1, "failed to exec");
     }
-    wait((int *)0);
+    int cstatus;
+    wait(&cstatus);
+    if (cstatus) {
+      errquit(cstatus, "exec line failed");
+    }
   }
   exit(0);
 }
