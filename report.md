@@ -3,6 +3,7 @@
 > 2253713 戴金瓯  
 
 实验版本：[2024](https://pdos.csail.mit.edu/6.828/2024/)  
+实验仓库：[https://github.com/LUFTSCH1/xv6-labs-2024](https://github.com/LUFTSCH1/xv6-labs-2024)  
 
 ## 配置实验环境  
 
@@ -559,7 +560,11 @@ int main(int argc, char *argv[]) {
       exec(exec_argv[0], exec_argv);
       errquit(1, "failed to exec");
     }
-    wait((int *)0);
+    int cstatus;
+    wait(&cstatus);
+    if (cstatus) {
+      errquit(cstatus, "exec line failed");
+    }
   }
   exit(0);
 }
