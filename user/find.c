@@ -40,7 +40,7 @@ static void find(char *cur_end, int depth) {
     return;
   }
   
-  int not_find = 1;
+  int not_found = 1;
   *cur_end++ = '/';
   for (struct dirent de; read(fd, &de, sizeof(de)) == sizeof(de); ) {
     // 排除空目录项、当前目录、父目录
@@ -53,8 +53,8 @@ static void find(char *cur_end, int depth) {
       fprintf(2, "cannot stat\n");
       continue;
     }
-    if (not_find && st.type == T_FILE) {
-      if (!(not_find = strcmp(de.name, dst))) {
+    if (not_found && st.type == T_FILE) {
+      if (!(not_found = strcmp(de.name, dst))) {
         printf("%s\n", buf);
       }
     } else if (st.type == T_DIR) {
