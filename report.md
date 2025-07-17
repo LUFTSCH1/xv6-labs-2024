@@ -489,13 +489,6 @@ static int getchar(void) {
   return ch;
 }
 
-static void clearline(void) {
-  int ch;
-  do {
-    ch = getchar();
-  } while (ch != 0 && ch != '\n');
-}
-
 static int readarg(char *const buf, int maxsize, enum argst *const st) {
   --maxsize;
   *st = ARGST_NORMAL;
@@ -541,16 +534,8 @@ int main(int argc, char *argv[]) {
       char *p = buf;
       enum argst st;
       int len, rest = MAXLEN, pos = base;
-      while ((len = readarg(p, rest, &st))) {
-        exec_argv[pos] = p;
-        if (st == ARGST_CUT || pos >= MAXARG - 1) {
-          if (st == ARGST_NORMAL) {
-            clearline();
-          }
-          st = ARGST_CUT;
-          break;
-        }
-        ++pos;
+      while ((len = readarg(p, rest, &st)) && st != ARGST_CUT && pos < MAXARG - 1) {
+        exec_argv[pos++] = p;
         p += len + 1;
         rest -= len + 1;
         if (st == ARGST_LAST) {
