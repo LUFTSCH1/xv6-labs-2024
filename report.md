@@ -19,12 +19,11 @@
 #### 准备编辑器智能提示支持  
 
 ```bash
-sudo apt install -y clangd bear gcc-multilib
+sudo apt install -y clangd bear
 ```
 简单解释一下安装内容：  
   * `clangd`：语言服务器核心  
-  * `bear`：编译指令捕获工具  
-  * `gcc-multilib`：跨架构编译支持库  
+  * `bear`：编译指令捕获工具   
 
 #### 官方要求的项目环境配置  
 
@@ -580,4 +579,85 @@ make grade
 ![util测试结果](./img/util.png)
 
 ## Lab: System calls（git checkout syscall）  
+
+### gdb
+
+```c
+struct proc {
+  lock = {
+    locked = 0x0,
+    name = 0x800071c8,
+    cpu = 0x0
+  },
+  state = 0x4,
+  chan = 0x0,
+  killed = 0x0,
+  xstate = 0x0,
+  pid = 0x1,
+  parent = 0x0,
+  kstack = 0x3fffffd000,
+  sz = 0x1000,
+  pagetable = 0x87f55000,
+  trapframe = 0x87f56000,
+  context = {
+    ra = 0x8000124e,
+    sp = 0x3fffffde80,
+    s0 = 0x3fffffdeb0,
+    s1 = 0x80007d80,
+    s2 = 0x80007950,
+    s3 = 0x1,
+    s4 = 0x8000dc08,
+    s5 = 0x3,
+    s6 = 0x80018a20,
+    s7 = 0x1,
+    s8 = 0x80018b48,
+    s9 = 0x4,
+    s10 = 0x0,
+    s11 = 0x0
+  },
+  ofile = {
+    0x0, 0x0, 0x0, 0x0,
+    0x0, 0x0, 0x0, 0x0,
+    0x0, 0x0, 0x0, 0x0,
+    0x0, 0x0, 0x0, 0x0
+  },
+  cwd = 0x80015e90,
+  name = {
+    0x69, 0x6e, 0x69, 0x74,
+    0x63, 0x6f, 0x64, 0x65,
+    0x0, 0x0, 0x0, 0x0,
+    0x0, 0x0, 0x0, 0x0
+  }
+}
+```
+
+#### Looking at the backtrace output, which function called syscall?
+
+  - usertrap  
+
+#### What is the value of p->trapframe->a7 and what does that value represent? (Hint: look user/initcode.S, the first user program xv6 starts.)
+
+  - `0x2`，为一个系统调用号，代表`SYS_exit`  
+
+#### What was the previous mode that the CPU was in?
+
+  - $sstatus = `0x200000022`，SPP (Bit 8) = 0，User Mode
+
+#### Write down the assembly instruction the kernel is panicing at. Which register corresponds to the variable num?
+
+```assembly
+// num = p->trapframe->a7;
+num = *(int *)0;
+  80001c1e:	00002683          	lw	a3,0(zero) # 0 <_entry-0x80000000>
+```
+  - 寄存器: a3  
+
+#### Why does the kernel crash? Hint: look at figure 3-3 in the text; is address 0 mapped in the kernel address space? Is that confirmed by the value in scause above? (See description of scause in RISC-V privileged instructions)
+
+  - 内核地址空间从`0x80000000`开始，`0x0`为用户地址空间起始，不在内核地址空间范围内  
+  - RISC-V的CPU检测到内存非法访问后会触发load page fault异常，并自动设置scause寄存器记录原因。内核恐慌时scause寄存器内的值为`0xd`，含义为加载地址错误，证实了结论  
+
+#### What is the name of the process that was running when the kernel paniced? What is its process id (pid)?
+
+  - 进程名：initcode，pid：1  
 
