@@ -7,12 +7,17 @@
 
 static void errquit(int, const char *) __attribute__((noreturn));
 
-static void errquit(const int status, const char prompt[]) {
-  fprintf(2, "%s\n", prompt);
+static void
+errquit(const int status, const char *const prompt)
+{
+  write(2, prompt, strlen(prompt));
+  write(2, "\n", 1);
   exit(status);
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
   // 虽然一个管道也能完成，但题目要求一对管道，每个负责一个方向
   int pwcr[2], prcw[2]; // pwcr父写子读，prcw父读子写
   if (pipe(pwcr) || pipe(prcw)) {

@@ -9,12 +9,17 @@ static void errquit(int, const char *) __attribute__((noreturn));
 static char buf[512];
 static const char *dst;
 
-static void errquit(const int status, const char prompt[]) {
-  fprintf(2, "%s\n", prompt);
+static void
+errquit(const int status, const char *const prompt)
+{
+  write(2, prompt, strlen(prompt));
+  write(2, "\n", 1);
   exit(status);
 }
 
-static void checkroot(const char *const root) {
+static void
+checkroot(const char *const root)
+{
   const int fd = open(root, O_RDONLY);
   if (fd < 0) {
     errquit(1, "failed to open root_directory");
@@ -29,7 +34,9 @@ static void checkroot(const char *const root) {
   close(fd);
 }
 
-static void find(char *cur_end, int depth) {
+static void
+find(char *cur_end, int depth)
+{
   if (cur_end - buf + 1 + DIRSIZ + 1 > sizeof(buf)) {
     fprintf(2, "path too long\n");
     return;
@@ -64,7 +71,9 @@ static void find(char *cur_end, int depth) {
   close(fd);
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
   if (argc != 2 && argc != 3) {
     fprintf(
       2,

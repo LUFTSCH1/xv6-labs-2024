@@ -13,12 +13,17 @@ enum argst {
 
 static void errquit(int, const char *) __attribute__((noreturn));
 
-static void errquit(const int status, const char prompt[]) {
-  fprintf(2, "%s\n", prompt);
+static void
+errquit(const int status, const char *const prompt)
+{
+  write(2, prompt, strlen(prompt));
+  write(2, "\n", 1);
   exit(status);
 }
 
-static int getchar(void) {
+static int
+getchar(void)
+{
   char ch;
   if (read(0, &ch, sizeof(ch)) != sizeof(ch)) {
     return 0;
@@ -26,7 +31,9 @@ static int getchar(void) {
   return ch;
 }
 
-static int readarg(char *const buf, int maxsize, enum argst *const st) {
+static int
+readarg(char *const buf, int maxsize, enum argst *const st)
+{
   --maxsize;
   *st = ARGST_NORMAL;
   int ch;
@@ -53,7 +60,9 @@ static int readarg(char *const buf, int maxsize, enum argst *const st) {
   return p - buf;
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
   if (argc < 2) {
     fprintf(2, "Usage: xargs <command> [initial-args...]\n");
     exit(1);
@@ -71,7 +80,9 @@ int main(int argc, char *argv[]) {
       char *p = buf;
       enum argst st;
       int len, rest = MAXLEN, pos = base;
-      while ((len = readarg(p, rest, &st)) && st != ARGST_CUT && pos < MAXARG - 1) {
+      while ((len = readarg(p, rest, &st)) &&
+             st != ARGST_CUT &&
+             pos < MAXARG - 1) {
         exec_argv[pos++] = p;
         p += len + 1;
         rest -= len + 1;
