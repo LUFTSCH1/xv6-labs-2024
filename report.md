@@ -1,22 +1,22 @@
-# xv6-riscv实验报告  
+# xv6-riscv实验报告
 
-> 2253713 戴金瓯  
+> 2253713 戴金瓯
 
 实验版本：[2024](https://pdos.csail.mit.edu/6.828/2024/)  
 实验仓库：[https://github.com/LUFTSCH1/xv6-labs-2024](https://github.com/LUFTSCH1/xv6-labs-2024)  
 
-## 配置实验环境  
+## 配置实验环境
 
 物理机环境：`Windows 11 (x64)`  
 [官方文档-安装说明部分](https://pdos.csail.mit.edu/6.828/2024/tools.html) 给出了许多环境的配置方式，这里选择使用`WSL2`进行实验环境配置，代码编辑器选用`Visual Studio Code`。  
 
-### 安装`WSL发行版`  
+### 安装`WSL发行版`
 
 打开`Microsoft Store`应用，搜索`Debian`并安装即可，本次实验所使用的版本为`Debian 12.9`，安装完成可以直接点击“打开”、在“开始”菜单旁的“搜索”功能输入`Debian`或是直接在`CMD`/`Power Shell`中输入`bash`启动（若安装了多个`WSL发行版`，则应注意该方式启动的是默认发行版）  
 
-### 配置`WSL发行版`  
+### 配置`WSL发行版`
 
-#### 准备编辑器智能提示支持  
+#### 准备编辑器智能提示支持
 
 ```bash
 sudo apt install -y clangd bear
@@ -25,7 +25,7 @@ sudo apt install -y clangd bear
   * `clangd`：语言服务器核心  
   * `bear`：编译指令捕获工具   
 
-#### 官方要求的项目环境配置  
+#### 官方要求的项目环境配置
 
 按照官网说明，需要安装一些工具，命令如下：
 ```bash
@@ -53,12 +53,12 @@ riscv64-unknown-elf-gcc --version
 riscv64-unknown-linux-gnu-gcc --version
 ```
 
-### 编辑器（`Visual Studio Code`）配置  
+### 编辑器（`Visual Studio Code`）配置
 
 `Visual Studio Code`安装在物理机中。在插件栏搜索并安装`WSL`插件，完成后左边栏将多出一个图标，为`远程资源管理器`。点击`远程资源管理器`，选择`WSL目标`中`Debian发行版`对应的选项进行连接。连接完成后若没有显示终端，则在左上角`查看`菜单中打开`终端`，现在可以在编辑器的终端中操作Linux子系统了。  
 另外，需要智能提示和自动代码补全，在编辑器的插件栏中搜索并安装`Clangd`插件。  
 
-### 拉取实验仓库  
+### 拉取实验仓库
 
 按照官方给出的仓库地址，执行：  
 ```bash
@@ -67,7 +67,7 @@ git clone git://g.csail.mit.edu/xv6-labs-2024
 **不要**拉取`GitHub`上的`mit-pdos/xv6-riscv`仓库，最简单直接的理由就是它没有提供实验测试脚本。  
 现在，实验目录就在`~/xv6-labs-2024`，在编辑器左边的`资源管理器`中使用`打开文件夹`功能，打开这个目录。  
 
-### 继续配置项目  
+### 继续配置项目
 
 如果要使用`git`进行版本控制，建议在`.gitignore`文件中加上如下配置：  
 ```.gitignore
@@ -97,9 +97,9 @@ compile_commands.json
 }
 ``` 
 
-### 第一次构建  
+### 第一次构建
 
-#### 第一次的例外  
+#### 第一次的例外
 
 ```bash
 bear -- make qemu  # 构建命令
@@ -107,14 +107,14 @@ bear -- make clean # 清除命令
 ```
 第一次构建使用以上命令中的构建命令，让`Clangd`知晓`-I.`参数，正确解析`kernel`和`user`目录。这样编辑器的自动缩进和`Clangd` Server就配置好了，打开一个C源程序，应当没有报错标红。  
 
-#### 实验指导使用的命令  
+#### 实验指导使用的命令
 
 ```bash
 make qemu
 ```
 依照实验指导，在项目根目录下输入以上命令来构建。完成构建则会自动启动`xv6`内核，按`Ctrl+A`后按`X`可以退出`QEMU`，回到Linux系统中。  
 
-## 实验系统调用（`user/user.h`）  
+## 实验系统调用（`user/user.h`）
 
 | 系统调用 | 解释 |
 | :-- | :-- |
@@ -139,28 +139,30 @@ make qemu
 | `int link(const char *file1, const char *file2)` | 为`file1`创建别名（硬链接）`file2`；成功返回0，失败返回-1 |
 | `int unlink(const char *file)` | 删除文件链接；成功返回0，失败返回-1 |
 
-## Lab: Xv6 and Unix utilities（git checkout util）  
+## Lab: Xv6 and Unix utilities（git checkout util）
 
-### sleep（`user/sleep.c` 难度：easy）  
+### sleep（`user/sleep.c` 难度：easy）
 
-#### 题目  
+#### 题目
 
 为`xv6`提供一个用户级工具`sleep`，类似`UNIX`中的`sleep`命令。你的`sleep`工具应该暂停用户指定的时钟节拍数（节拍是`xv6`内核定义的时间概念，即定时器芯片两次中断之间的时间间隔）你的解决方案应位于文件`user/sleep.c`中。  
 
-#### 简要分析  
+#### 简要分析
 
 思路上只需要从参数中拿到用户指定的时钟节拍数，直接传给`sleep`系统调用即可。实现上有几个注意点：  
   * `xv6`中没有`标准C runtime初始化系统`（包含于`libc`中），其进程的退出必须调用`int exit(int status)`，而不是在主函数中直接`return`（实际上平时写的`return 0;`后还有`libc`调用`exit`）。  
   * 提示中说明从数字字符串转换为整型变量可以用`int atoi(const char *s)`（定义位于`user/ulib.c`），从其实现可以看出：转换失败返回0，成功返回一个正数。  
 
-#### 代码  
+#### 代码
 
 ```c
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
   int interval;
   if (argc != 2 || (interval = atoi(argv[1])) <= 0) {
     fprintf(2, "Usage: %s <positive_integer_interval>\n", argv[0]);
@@ -173,7 +175,7 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-#### 本题额外说明  
+#### 本题额外说明
 
 接着在项目根目录`Makefile`文件第180行的`UPROGS`项下追加：  
 ```makefile
@@ -192,13 +194,13 @@ chmod +x ./grade-lab-util
 
 以上构建和测试方法后续通用，无特殊情况将不重复说明。  
 
-### pingpong（`user/pingpong.c` 难度：easy）  
+### pingpong（`user/pingpong.c` 难度：easy）
 
-#### 题目  
+#### 题目
 
 编写一个用户级程序，使用`xv6`系统调用通过一对管道在两个进程之间“ping pong”发送一个字节。父进程应向子进程发送一个字节；子进程应打印“`<pid>: received ping`”（其中`<pid>`是子进程PID），并将该字节通过管道写入父进程，然后退出；父进程应从子进程读取该字节，打印“`<pid>: received pong`”（其中`<pid>`是父进程PID），然后退出。你的解决方案应位于文件`user/pingpong.c`中。  
 
-#### 简要分析  
+#### 简要分析
 
 先来了解`xv6`的`fork`、`pipe`、`wait`机制： 
   * `fork`：从含`fork()`的语句处对进程进行“分身”，将当前进程作为父进程，完整拷贝一份父进程的内存数据生成子进程，这两个进程会被挂起等待调度。父进程将从刚刚提到的含`fork()`的那句继续执行，其`fork()`函数返回子进程的PID（一个正数）；子进程也将从同一句（仅代码角度的同一句）开始执行，其`fork()`调用返回0，表示它是子进程。
@@ -206,7 +208,7 @@ chmod +x ./grade-lab-util
   * `pipe`：管道是一种虚拟文件，打开管道`int pipe(int p[])`将生成一对读、写文件描述符分别存入`&p[0]`、`&p[1]`处。在打开的读、写文件对象的引用计数均归零后管道会被释放。  
   * `wait`：子进程执行完后不会完全消失，而是进入`僵尸进程`状态，需要父进程调用`int wait(int *status)`进行回收，这是`wait`的根本作用。另外，由于父子进程执行顺序完全取决于操作系统的调度，尽管调度算法是确定的，但实际情况相当复杂，故可以认为执行顺序不确定。调整父进程中`wait`调用的位置可以保证其之后的语句一定在子进程退出后执行，在必要时可以通过`status`确定子进程执行是否成功。  
 
-#### 代码  
+#### 代码
 
 ```c
 #include "kernel/types.h"
@@ -218,12 +220,17 @@ chmod +x ./grade-lab-util
 
 static void errquit(int, const char *) __attribute__((noreturn));
 
-static void errquit(const int status, const char prompt[]) {
-  fprintf(2, "%s\n", prompt);
+static void
+errquit(const int status, const char *const prompt)
+{
+  write(2, prompt, strlen(prompt));
+  write(2, "\n", 1);
   exit(status);
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
   // 虽然一个管道也能完成，但题目要求一对管道，每个负责一个方向
   int pwcr[2], prcw[2]; // pwcr父写子读，prcw父读子写
   if (pipe(pwcr) || pipe(prcw)) {
@@ -253,17 +260,17 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-### primes（`user/primes.c` 难度：hard）  
+### primes（`user/primes.c` 难度：hard）
 
-#### 题目  
+#### 题目
 
 用管道为`xv6`编写一个并行素数筛程序。使用`pipe`和`fork`来设置管道，第一个进程将2到280间的数送入管道。对于每个素数，你需要创建一个进程，该进程通过一个管道从其左侧相邻进程读取数据，并通过另一个管道写入其右侧相邻的进程。由于`xv6`的文件描述符和进程数量有限，因此第一个进程可以在280处停止。你的解决方案应位于文件`user/primes.c`中。  
 
-#### 简要分析  
+#### 简要分析
 
 本题可以采用埃氏筛进行实现。每个管道视为一个序列，顺序为数写入的先后（从小到大写入）。主进程显然有一个2-280的序列，然后进行筛除。每次取出并打印序列首的数，这一定是当前序列中最小的质数，然后将序列中不能被该数整除的数按顺序复制进新的序列（新管道）；重复上述过程，直到序列为空。  
 
-#### 代码  
+#### 代码
 
 ```c
 #include "kernel/types.h"
@@ -281,12 +288,17 @@ static void prime(int) __attribute__((noreturn));
 static const char S_EXCE_PIPE[] = "failed to create pipe";
 static const char S_EXCE_FORK[] = "failed to fork";
 
-static void errquit(const int status, const char prompt[]) {
-  fprintf(2, "%s\n", prompt);
+static void
+errquit(const int status, const char *const prompt)
+{
+  write(2, prompt, strlen(prompt));
+  write(2, "\n", 1);
   exit(status);
 }
 
-static void prime(const int rfd) {
+static void
+prime(const int rfd)
+{
   int pri;
   if (read(rfd, &pri, INT_SIZE) != INT_SIZE) {
     close(rfd);
@@ -319,7 +331,9 @@ static void prime(const int rfd) {
   exit(cstatus);
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
   int fds[2];
   if (pipe(fds)) {
     errquit(1, S_EXCE_PIPE);
@@ -345,17 +359,17 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-### find（`user/find.c` 难度：中等）  
+### find（`user/find.c` 难度：中等）
 
-#### 题目  
+#### 题目
 
 为`xv6`写一个简化的`UNIX` `find`程序：查找目录树中所有指定名称的文件，你的解决方案应位于文件`user/find.c`中。  
 
-#### 简要分析  
+#### 简要分析
 
 需要阅读`user/ls.h`来了解如何读取目录。阅读源码并查看函数定义后发现，`xv6`中，有三种文件类型，分别由宏`T_DEVICE`、`T_FILE`和`T_DIR`标识。`目录`也是一种特殊的文件，`目录文件`存储着目录中的`目录项`。目录项由结构体`dirent`定义，其成员是`short inum`和`char name[DIRSIZ]`。前者标识目录项是否被使用（0表示空目录项）；后者是目录项对应目录中的的文件名。读取目录时，以只读模式打开目录文件并获取其文件描述符，使用`read`将该文件逐项读入一个`dirent`中，就可以获取目录内的目录项的名字。如果需要这个目录项对应的详细信息（如它到底是设备、文件、还是目录等），则需要将这个名字拼接到关于当前进程工作目录的相对路径中，使用`stat`（相较于`fstat`，`stat`在获取文件元数据时不需要手动打开文件，适合后续不需要文件描述符的操作，便于管理）将文件元数据读取到`stat`结构体中。`find`递归实现中，由于保证先遍历完当前目录中的文件再进入下级目录需要额外开销，故直接先按默认顺序遍历（遇到文件比较是不是目标，遇到目录直接先进去），这种方式直接通过了测试。  
 
-#### 代码  
+#### 代码
 
 ```c
 #include "kernel/types.h"
@@ -369,12 +383,17 @@ static void errquit(int, const char *) __attribute__((noreturn));
 static char buf[512];
 static const char *dst;
 
-static void errquit(const int status, const char prompt[]) {
-  fprintf(2, "%s\n", prompt);
+static void
+errquit(const int status, const char *const prompt)
+{
+  write(2, prompt, strlen(prompt));
+  write(2, "\n", 1);
   exit(status);
 }
 
-static void checkroot(const char *const root) {
+static void
+checkroot(const char *const root)
+{
   const int fd = open(root, O_RDONLY);
   if (fd < 0) {
     errquit(1, "failed to open root_directory");
@@ -389,7 +408,9 @@ static void checkroot(const char *const root) {
   close(fd);
 }
 
-static void find(char *cur_end, int depth) {
+static void
+find(char *cur_end, int depth)
+{
   if (cur_end - buf + 1 + DIRSIZ + 1 > sizeof(buf)) {
     fprintf(2, "path too long\n");
     return;
@@ -424,7 +445,9 @@ static void find(char *cur_end, int depth) {
   close(fd);
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
   if (argc != 2 && argc != 3) {
     fprintf(
       2,
@@ -448,17 +471,17 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-### xargs（`user/xargs.c` 难度：中等）  
+### xargs（`user/xargs.c` 难度：中等）
 
-#### 题目  
+#### 题目
 
 为 xv6 编写一个 UNIX xargs 程序的简单版本：它的参数描述一个要运行的命令，它从标准输入读取一行，然后逐行运行该命令，并将该行附加到命令的参数中。你的解决方案应位于文件`user/xargs.c`中。  
 
-#### 简要分析  
+#### 简要分析
 
 创建一个缓冲数组，将标准输入中的参数逐个读入该数组中，并将其首地址追加入`argv`数组，每个参数以尾零分隔，读完一行则`fork`一个子进程去执行（因为`exec`调用成功会覆盖当前进程，故必须让进程副本去执行）。  
 
-#### 代码  
+#### 代码
 
 ```c
 #include "kernel/types.h"
@@ -476,12 +499,17 @@ enum argst {
 
 static void errquit(int, const char *) __attribute__((noreturn));
 
-static void errquit(const int status, const char prompt[]) {
-  fprintf(2, "%s\n", prompt);
+static void
+errquit(const int status, const char *const prompt)
+{
+  write(2, prompt, strlen(prompt));
+  write(2, "\n", 1);
   exit(status);
 }
 
-static int getchar(void) {
+static int
+getchar(void)
+{
   char ch;
   if (read(0, &ch, sizeof(ch)) != sizeof(ch)) {
     return 0;
@@ -489,7 +517,9 @@ static int getchar(void) {
   return ch;
 }
 
-static int readarg(char *const buf, int maxsize, enum argst *const st) {
+static int
+readarg(char *const buf, int maxsize, enum argst *const st)
+{
   --maxsize;
   *st = ARGST_NORMAL;
   int ch;
@@ -516,7 +546,9 @@ static int readarg(char *const buf, int maxsize, enum argst *const st) {
   return p - buf;
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
   if (argc < 2) {
     fprintf(2, "Usage: xargs <command> [initial-args...]\n");
     exit(1);
@@ -534,7 +566,9 @@ int main(int argc, char *argv[]) {
       char *p = buf;
       enum argst st;
       int len, rest = MAXLEN, pos = base;
-      while ((len = readarg(p, rest, &st)) && st != ARGST_CUT && pos < MAXARG - 1) {
+      while ((len = readarg(p, rest, &st)) &&
+             st != ARGST_CUT &&
+             pos < MAXARG - 1) {
         exec_argv[pos++] = p;
         p += len + 1;
         rest -= len + 1;
@@ -568,7 +602,7 @@ int main(int argc, char *argv[]) {
   exit(0);
 }
 ```
-### 测试  
+### 测试
 
 在根目录上创建一个`time.txt`，内容为一个整型，记录实验用时（小时数）。然后测试目录结构和所有题目：  
 
@@ -578,7 +612,7 @@ make grade
 
 ![util测试结果](./img/util.png)
 
-## Lab: System calls（git checkout syscall）  
+## Lab: System calls（git checkout syscall）
 
 ### gdb
 
@@ -660,4 +694,188 @@ num = *(int *)0;
 #### What is the name of the process that was running when the kernel paniced? What is its process id (pid)?
 
   - 进程名：initcode，pid：1  
+
+### System call tracing（`user/trace.c` 难度：中等）
+
+#### 题目
+
+在本作业中，你将添加一个系统调用跟踪功能，该功能可能有助于你调试后续的实验。你将创建一个新的trace系统调用来控制跟踪。它应该接受一个参数，即一个整数“掩码”，其位指定要跟踪的系统调用。例如，要跟踪`fork`系统调用，程序会调用`trace(1 << SYS_fork)`，其中`SYS_fork`是`kernel/syscall.h`中的系统调用编号。如果系统调用的编号在掩码中设置，则你必须修改`xv6`内核，使其在每个系统调用即将返回时打印一行。该行应包含进程 ID、系统调用名称和返回值；你无需打印系统调用参数。trace系统调用应该启用对调用它的进程及其后续分叉的任何子进程的跟踪，但不应影响其他进程。  
+
+#### 简要分析
+
+- `Makefile`中添加`trace`
+```makefile
+UPROGS=\
+	...
+	$U/_trace\
+```
+
+- `user/user.h`中添加函数声明
+```c
+// system calls
+int fork(void);
+...
+int trace(int);
+```
+
+- `user/usys.pl`中添加系统调用存根
+```pl
+entry("trace");
+```
+
+- `kernel/syscall.h`中添加系统调用号
+```c
+#define SYS_trace 22
+```
+
+- `kernel/proc.h`中添加`proc`结构体成员储存掩码
+```c
+struct proc {
+  ...
+  int tmask; // Trace mask
+  ...
+};
+```
+
+- `kernel/sysproc.c`末尾定义`sys_trace`函数
+```c
+uint64
+sys_trace(void)
+{
+  int mask;
+  argint(0, &mask);
+  myproc()->tmask = mask;
+  return 0;
+}
+```
+
+- `kernel/proc.c`中修改`fork`函数定义
+```c
+int
+fork(void)
+{
+  ...
+  np->cwd = idup(p->cwd);
+  np->tmask = p->tmask;
+
+  safestrcpy(np->name, p->name, sizeof(p->name));
+  ...
+}
+```
+
+- `kernel/syscall.c`中修改如下标注的四处
+```c
+...
+// Prototypes for the functions that handle system calls.
+extern uint64 sys_fork(void);
+...
+extern uint64 sys_trace(void); // 1 添加外部声明
+...
+static uint64 (*syscalls[])(void) = {
+...
+[SYS_trace] sys_trace          // 2 添加入系统调用函数指针数组
+};
+
+static char *syscall_name[] = {
+[SYS_fork]    "fork",
+[SYS_exit]    "exit",
+[SYS_wait]    "wait",
+[SYS_pipe]    "pipe",
+[SYS_read]    "read",
+[SYS_kill]    "kill",
+[SYS_exec]    "exec",
+[SYS_fstat]   "fstat",
+[SYS_chdir]   "chdir",
+[SYS_dup]     "dup",
+[SYS_getpid]  "getpid",
+[SYS_sbrk]    "sbrk",
+[SYS_sleep]   "sleep",
+[SYS_uptime]  "uptime",
+[SYS_open]    "open",
+[SYS_write]   "write",
+[SYS_mknod]   "mknod",
+[SYS_unlink]  "unlink",
+[SYS_link]    "link",
+[SYS_mkdir]   "mkdir",
+[SYS_close]   "close",
+[SYS_trace]   "trace"
+};                             // 3 添加系统调用名数组
+...
+
+void
+syscall(void)
+{
+  ...
+  if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+    // Use num to lookup the system call function for num, call it,
+    // and store its return value in p->trapframe->a0
+    p->trapframe->a0 = syscalls[num]();
+    // processing trace
+    if ((p->tmask >> num) & 1) {
+      printf("%d: syscall %s -> %d\n",
+             p->pid, syscall_name[num], (int)p->trapframe->a0);
+    }                          // 4 添加符合条件时打印追踪信息
+    ...
+}
+```
+
+### Attack xv6（`user/attack.c` 难度：中等）
+
+#### 题目
+
+`user/secret.c`在其内存中写入一个 8 字节的密钥，然后退出（这将释放其内存）。您的目标是向`user/attack.c`添加几行代码，以查找上次执行`secret.c`时写入内存的密钥，并将这 8 个密钥字节写入文件描述符 2。如果attacktest打印出`OK: secret is ebb.ebb`，您将获得满分。（注意： attacktest 每次运行的密钥可能不同。）
+
+#### 简要分析
+
+扫描每页前第8-31字节的特征前缀找到目标页，直接输出第32字节开始的8字节即可（前第0-7字节会被用于指针被覆写）
+
+#### 代码
+
+```c
+#include "kernel/types.h"
+#include "kernel/fcntl.h"
+#include "user/user.h"
+#include "kernel/riscv.h"
+
+#define MAXPG 64
+
+static const char marker[] = "my very very very secret pw is:   ";
+
+static void errquit(int, const char *) __attribute__((noreturn));
+
+static void
+errquit(const int status, const char *const prompt)
+{
+  write(2, prompt, strlen(prompt));
+  write(2, "\n", 1);
+  exit(status);
+}
+
+int
+main(int argc, char *argv[])
+{
+  // your code here.  you should write the secret to fd 2 using write
+  // (e.g., write(2, secret, 8)
+  char *p = sbrk(PGSIZE * MAXPG);
+  if (p == (char *)-1) {
+    errquit(1, "sbrk failed");
+  }
+
+  int i = 0;
+  while (i < MAXPG && memcmp(p + 8, marker + 8, 24)) {
+    ++i;
+    p += PGSIZE;
+  }
+  if (i >= MAXPG) {
+    errquit(1, "failed to find marker");
+  }
+
+  write(2, p + 32, 8);
+  exit(0);
+}
+```
+
+![syscall测试结果](./img/syscall.png)
+
+## Lab: page tables（git checkout pgtbl）
 
