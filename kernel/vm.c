@@ -117,6 +117,29 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   return &pagetable[PX(0, va)];
 }
 
+#ifdef LAB_PGTBL
+pte_t *
+superwalk(pagetable_t pagetable, uint64 va, int alloc)
+{
+  if (va >= MAXVA) {
+    panic("superwalk");
+  }
+
+  pte_t *pte = pagetable + PX(2, va);
+  if (*pte & PTE_V) {
+    pagetable = (pagetable_t)PTE2PA(*pte);
+    return pagetable + PX(1, va);
+  } else {
+    if (!alloc || (pagetable = (pte_t *)kalloc()) == 0) {
+      return 0;
+    }
+    memset(pagetable, 0, PGSIZE);
+    *pte = PA2PTE(pagetable) | PTE_V;
+    return pagetable + PX(0, va);
+  }
+}
+#endif
+
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
 // Can only be used to look up user pages.
@@ -160,29 +183,48 @@ int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
   uint64 a, last;
+  uint64 sz = PGSIZE;
   pte_t *pte;
 
-  if((va % PGSIZE) != 0)
+#ifdef LAB_PGTBL
+  if (pa >= SUPERBASE) {
+    sz = SUPERPGSIZE;
+  }
+#endif
+
+  if((va % sz) != 0)
     panic("mappages: va not aligned");
 
-  if((size % PGSIZE) != 0)
+  if((size % sz) != 0)
     panic("mappages: size not aligned");
 
   if(size == 0)
     panic("mappages: size");
   
   a = va;
-  last = va + size - PGSIZE;
+  last = va + size - sz;
   for(;;){
-    if((pte = walk(pagetable, a, 1)) == 0)
-      return -1;
+#ifndef LAB_PGTBL
+      if((pte = walk(pagetable, a, 1)) == 0) {
+        return -1;
+      }
+#else
+      if (sz == PGSIZE) {
+        if ((pte = walk(pagetable, a, 1)) == 0) {
+          return -1;
+        }
+      } else if ((pte = superwalk(pagetable, a, 1)) == 0) {
+        return -1;
+      }
+#endif
+    
     if(*pte & PTE_V)
       panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
-    a += PGSIZE;
-    pa += PGSIZE;
+    a += sz;
+    pa += sz;
   }
   return 0;
 }
@@ -200,8 +242,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   if((va % PGSIZE) != 0)
     panic("uvmunmap: not aligned");
 
-  for(a = va; a < va + npages*PGSIZE; a += sz){
-    sz = PGSIZE;
+  for(a = va, sz = PGSIZE; a < va + npages*PGSIZE; a += sz){
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0) {
@@ -210,9 +251,22 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     }
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
+    uint64 pa = PTE2PA(*pte);
+#ifdef LAB_PGTBL
+    if (pa >= SUPERBASE) {
+      a += SUPERPGSIZE - sz;
+    }
+#endif
     if(do_free){
-      uint64 pa = PTE2PA(*pte);
+#ifndef LAB_PGTBL
       kfree((void*)pa);
+#else
+      if (pa >= SUPERBASE) {
+        superfree((void *)pa);
+      } else {
+        kfree((void *)pa);
+      }
+#endif
     }
     *pte = 0;
   }
@@ -261,8 +315,13 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
     return oldsz;
 
   oldsz = PGROUNDUP(oldsz);
-  for(a = oldsz; a < newsz; a += sz){
-    sz = PGSIZE;
+  for(a = oldsz, sz = PGSIZE;
+#ifndef LAB_PGTBL
+      a < newsz;
+#else
+      a < SUPERPGROUNDUP(oldsz) && a < newsz; // 利用超级页对齐浪费的空间
+#endif
+      a += sz){
     mem = kalloc();
     if(mem == 0){
       uvmdealloc(pagetable, a, oldsz);
@@ -277,6 +336,35 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
       return 0;
     }
   }
+#ifdef LAB_PGTBL
+  // 尝试申请超级页
+  for (sz = SUPERPGSIZE; a + SUPERPGSIZE < newsz; a += sz) {
+    mem = superalloc();
+    if (mem == 0) {
+      break;
+    }
+    memset(mem, 0, sz);
+    if (mappages(pagetable, a, sz, (uint64)mem, PTE_R | PTE_U | xperm) != 0) {
+      superfree(mem);
+      uvmdealloc(pagetable, a, oldsz);
+      return 0;
+    }
+  }
+  // 普通页补齐剩余空间
+  for (sz = PGSIZE; a < newsz; a += sz) {
+    mem = kalloc();
+    if (mem == 0) {
+      uvmdealloc(pagetable, a, oldsz);
+      return 0;
+    }
+    memset(mem, 0, sz);
+    if (mappages(pagetable, a, sz, (uint64)mem, PTE_R | PTE_U | xperm) != 0) {
+      kfree(mem);
+      uvmdealloc(pagetable, a, oldsz);
+      return 0;
+    }
+  }
+#endif
   return newsz;
 }
 
@@ -345,18 +433,36 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
   for(i = 0; i < sz; i += szinc){
     szinc = PGSIZE;
-    szinc = PGSIZE;
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
+#ifndef LAB_PGTBL
     if((mem = kalloc()) == 0)
       goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+#else
+    if (pa >= SUPERBASE) {
+      szinc = SUPERPGSIZE;
+      if ((mem = superalloc()) == 0) {
+        goto err;
+      }
+    } else if ((mem = kalloc()) == 0) {
+      goto err;
+    }
+#endif
+    memmove(mem, (char *)pa, szinc);
+    if(mappages(new, i, szinc, (uint64)mem, flags) != 0){
+#ifndef LAB_PGTBL
       kfree(mem);
+#else
+      if (szinc == PGSIZE) {
+        kfree(mem);
+      } else {
+        superfree(mem);
+      }
+#endif
       goto err;
     }
   }
@@ -488,8 +594,17 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 
 
 #ifdef LAB_PGTBL
+static inline
+uint64 sext39(uint64 x)
+{
+  if (x & ((uint64)1 << 38)) {
+    x |= (~(uint64)0) << 39;
+  }
+  return x;
+}
+
 static void
-vmprint_rec(pagetable_t pt, int level) // 加入该递归函数
+vmprint_rec(const pagetable_t pt, const uint64 va_prefix, const int level)
 {
   if (level < 0) {
     return;
@@ -502,9 +617,7 @@ vmprint_rec(pagetable_t pt, int level) // 加入该递归函数
     }
 
     const uint64 pa = PTE2PA(pte);
-    uint64 va = ((uint64)i) << PXSHIFT(level);
-    // Sv39: 对39位地址做符号扩展（把位38当作符号位）
-    va = ((long long)(va << (64 - 39))) >> (64 - 39);
+    const uint64 va = sext39((uint64)i << PXSHIFT(level) | va_prefix);
 
     for (int k = 0; k< (3 - level); ++k) {
       printf(" ..");  // 按深度缩进：顶层1个“ ..”
@@ -514,7 +627,7 @@ vmprint_rec(pagetable_t pt, int level) // 加入该递归函数
 
     // 若不是叶子（无 R/W/X），则继续向下打印子页表
     if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
-      vmprint_rec((pagetable_t)pa, level - 1);
+      vmprint_rec((pagetable_t)pa, va, level - 1);
     }
   }
 }
@@ -524,7 +637,7 @@ vmprint(pagetable_t pagetable)
 {
   // your code here
   printf("page table %p\n", (void *)pagetable);
-  vmprint_rec(pagetable, 2);   // Sv39: 顶层 level=2
+  vmprint_rec(pagetable, 0, 2); // Sv39: 顶层 level=2
 }
 #endif
 

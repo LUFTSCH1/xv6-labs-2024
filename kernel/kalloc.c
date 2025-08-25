@@ -10,6 +10,9 @@
 #include "defs.h"
 
 void freerange(void *pa_start, void *pa_end);
+#ifdef LAB_PGTBL
+void superfreerange(void *pa_start, void *pa_end);
+#endif
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
@@ -21,14 +24,32 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-} kmem;
+}
+#ifndef LAB_PGTBL
+kmem;
+#else
+kmem, supermem;
+#endif
 
 void
-kinit()
+kinit(void)
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+#ifndef LAB_PGTBL
+  freerange(end, (void *)PHYSTOP);
+#else
+  freerange(end, (void *)SUPERBASE);
+#endif
 }
+
+#ifdef LAB_PGTBL
+void
+superinit(void)
+{
+  initlock(&supermem.lock, "supermem");
+  superfreerange((void *)SUPERBASE, (void *)PHYSTOP);
+}
+#endif
 
 void
 freerange(void *pa_start, void *pa_end)
@@ -38,6 +59,19 @@ freerange(void *pa_start, void *pa_end)
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
 }
+
+#ifdef LAB_PGTBL
+void
+superfreerange(void *pa_start, void *pa_end)
+{
+  char *p;
+  p = (char *)SUPERPGROUNDUP((uint64)pa_start);
+  while (p + SUPERPGSIZE <= (char *)pa_end) {
+    superfree(p);
+    p += SUPERPGSIZE;
+  }
+}
+#endif
 
 // Free the page of physical memory pointed at by pa,
 // which normally should have been returned by a
@@ -62,6 +96,26 @@ kfree(void *pa)
   release(&kmem.lock);
 }
 
+#ifdef LAB_PGTBL
+void
+superfree(void *pa)
+{
+  if ((uint64)pa % SUPERPGSIZE ||
+      (uint64)pa < SUPERBASE ||
+      (uint64)pa >= PHYSTOP) {
+    panic("superfree");
+  }
+
+  memset(pa, 1, SUPERPGSIZE);
+
+  struct run *r = (struct run *)pa;
+  acquire(&supermem.lock);
+  r->next = supermem.freelist;
+  supermem.freelist = r;
+  release(&supermem.lock);
+}
+#endif
+
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
@@ -80,3 +134,23 @@ kalloc(void)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
 }
+
+#ifdef LAB_PGTBL
+void *
+superalloc(void)
+{
+  struct run *r;
+
+  acquire(&supermem.lock);
+  r = supermem.freelist;
+  if (r) {
+    supermem.freelist = r->next;
+  }
+  release(&supermem.lock);
+
+  if (r) {
+    memset(r, 5, SUPERPGSIZE);
+  }
+  return (void *)r;
+}
+#endif

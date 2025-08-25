@@ -17,6 +17,9 @@ main()
     printf("xv6 kernel is booting\n");
     printf("\n");
     kinit();         // physical page allocator
+#ifdef LAB_PGTBL
+    superinit();
+#endif
     kvminit();       // create kernel page table
     kvminithart();   // turn on paging
     procinit();      // process table

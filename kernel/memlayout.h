@@ -42,6 +42,9 @@
 // from physical address 0x80000000 to PHYSTOP.
 #define KERNBASE 0x80000000L
 #define PHYSTOP (KERNBASE + 128*1024*1024)
+#ifdef LAB_PGTBL
+#define SUPERBASE (KERNBASE + 2 * (1 << 20) * 12) // 超级页起始地址
+#endif
 
 // map the trampoline page to the highest address,
 // in both user and kernel space.
