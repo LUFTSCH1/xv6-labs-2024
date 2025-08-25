@@ -688,8 +688,8 @@ num = *(int *)0;
 
 #### Why does the kernel crash? Hint: look at figure 3-3 in the text; is address 0 mapped in the kernel address space? Is that confirmed by the value in scause above? (See description of scause in RISC-V privileged instructions)
 
-  - 内核地址空间从`0x80000000`开始，`0x0`为用户地址空间起始，不在内核地址空间范围内  
-  - RISC-V的CPU检测到内存非法访问后会触发load page fault异常，并自动设置scause寄存器记录原因。内核恐慌时scause寄存器内的值为`0xd`，含义为加载地址错误，证实了结论  
+  - 内核地址空间从`0x80000000`开始，`0x0`为用户地址空间起始，不在内核地址空间范围内。
+  - RISC-V的CPU检测到内存非法访问后会触发load page fault异常，并自动设置scause寄存器记录原因。内核恐慌时scause寄存器内的值为`0xd`，含义为加载地址错误，证实了结论。
 
 #### What is the name of the process that was running when the kernel paniced? What is its process id (pid)?
 
@@ -701,7 +701,7 @@ num = *(int *)0;
 
 在本作业中，你将添加一个系统调用跟踪功能，该功能可能有助于你调试后续的实验。你将创建一个新的trace系统调用来控制跟踪。它应该接受一个参数，即一个整数“掩码”，其位指定要跟踪的系统调用。例如，要跟踪`fork`系统调用，程序会调用`trace(1 << SYS_fork)`，其中`SYS_fork`是`kernel/syscall.h`中的系统调用编号。如果系统调用的编号在掩码中设置，则你必须修改`xv6`内核，使其在每个系统调用即将返回时打印一行。该行应包含进程 ID、系统调用名称和返回值；你无需打印系统调用参数。trace系统调用应该启用对调用它的进程及其后续分叉的任何子进程的跟踪，但不应影响其他进程。  
 
-#### 简要分析
+#### 步骤
 
 - `Makefile`中添加`trace`
 ```makefile
@@ -769,11 +769,11 @@ fork(void)
 // Prototypes for the functions that handle system calls.
 extern uint64 sys_fork(void);
 ...
-extern uint64 sys_trace(void); // 1 添加外部声明
+extern uint64 sys_trace(void); // 1 添加外部声明 +1行
 ...
 static uint64 (*syscalls[])(void) = {
 ...
-[SYS_trace] sys_trace          // 2 添加入系统调用函数指针数组
+[SYS_trace] sys_trace          // 2 添加入系统调用函数指针数组 +1行
 };
 
 static char *syscall_name[] = {
@@ -799,7 +799,7 @@ static char *syscall_name[] = {
 [SYS_mkdir]   "mkdir",
 [SYS_close]   "close",
 [SYS_trace]   "trace"
-};                             // 3 添加系统调用名数组
+};                             // 3 添加系统调用名数组 +23行
 ...
 
 void
@@ -814,7 +814,7 @@ syscall(void)
     if ((p->tmask >> num) & 1) {
       printf("%d: syscall %s -> %d\n",
              p->pid, syscall_name[num], (int)p->trapframe->a0);
-    }                          // 4 添加符合条件时打印追踪信息
+    }                          // 4 添加符合条件时打印追踪信息 +4行
     ...
 }
 ```
@@ -823,11 +823,11 @@ syscall(void)
 
 #### 题目
 
-`user/secret.c`在其内存中写入一个 8 字节的密钥，然后退出（这将释放其内存）。您的目标是向`user/attack.c`添加几行代码，以查找上次执行`secret.c`时写入内存的密钥，并将这 8 个密钥字节写入文件描述符 2。如果attacktest打印出`OK: secret is ebb.ebb`，您将获得满分。（注意： attacktest 每次运行的密钥可能不同。）
+`user/secret.c`在其内存中写入一个 8 字节的密钥，然后退出（这将释放其内存）。您的目标是向`user/attack.c`添加几行代码，以查找上次执行`secret.c`时写入内存的密钥，并将这 8 个密钥字节写入文件描述符 2。如果attacktest打印出`OK: secret is ebb.ebb`，您将获得满分。（注意： attacktest 每次运行的密钥可能不同。）。  
 
 #### 简要分析
 
-扫描每页前第8-31字节的特征前缀找到目标页，直接输出第32字节开始的8字节即可（前第0-7字节会被用于指针被覆写）
+扫描每页前第8-31字节的特征前缀找到目标页，直接输出第32字节开始的8字节即可（前第0-7字节会被用于指针被覆写）。  
 
 #### 代码
 
@@ -875,7 +875,566 @@ main(int argc, char *argv[])
 }
 ```
 
+### 测试
+
 ![syscall测试结果](./img/syscall.png)
 
 ## Lab: page tables（git checkout pgtbl）
+
+### Inspect a user-process page table（难度：简单）
+
+#### 题目
+
+对于print_pgtbl输出 中的每个页表项，解释其逻辑上包含的内容以及其权限位。xv6 手册中的图 3.4 可能会有所帮助，但请注意，该图的页面集合可能与此处检查的进程略有不同。需要注意的是，xv6 不会将虚拟页面连续地放置在物理内存中。  
+
+#### 输出
+
+```text
+va 0x0 pte 0x21FC885B pa 0x87F22000 perm 0x5B
+va 0x1000 pte 0x21FC7C17 pa 0x87F1F000 perm 0x17
+va 0x2000 pte 0x21FC7807 pa 0x87F1E000 perm 0x7
+va 0x3000 pte 0x21FC74D7 pa 0x87F1D000 perm 0xD7
+va 0x4000 pte 0x0 pa 0x0 perm 0x0
+va 0x5000 pte 0x0 pa 0x0 perm 0x0
+va 0x6000 pte 0x0 pa 0x0 perm 0x0
+va 0x7000 pte 0x0 pa 0x0 perm 0x0
+va 0x8000 pte 0x0 pa 0x0 perm 0x0
+va 0x9000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFF6000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFF7000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFF8000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFF9000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFFA000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFFB000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFFC000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFFD000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFFE000 pte 0x21FD08C7 pa 0x87F42000 perm 0xC7
+va 0xFFFFF000 pte 0x2000184B pa 0x80006000 perm 0x4B
+```
+
+#### 解释
+
+- va 0x0, perm 0x5B = V+R+X+U+A  
+  用户可读/可执行，已访问；典型 .text/.rodata。
+- va 0x1000, perm 0x17 = V+R+W+U  
+  用户可读写（无执行）；典型**.data/.bss 或堆/栈页**（尚未出现 A/D，可能刚映射或未触达）。
+- va 0x2000, perm 0x07 = V+R+W（无 U）  
+  仅内核可读写，用户态不可访问。放在用户低地址空间而不带 U 不常见，值得关注（见下方“核查建议”）。
+- va 0x3000, perm 0xD7 = V+R+W+U+A+D  
+  用户可读写，且已访问且被写过；典型可写数据页。
+- va 0x4000 ~ 0x9000, perm 0x0  
+  未映射空洞。
+- va 0xFFFF6000 ~ 0xFFFFD000, perm 0x0  
+  高地址段多数为空洞，其中 0xFFFFD000 常作为栈保护页（guard page）。
+- va 0xFFFFE000, perm 0xC7 = V+R+W+A+D（无 U/X）  
+  trapframe：仅内核可读写，用户不可访问，且已访问/写过。
+- va 0xFFFFF000, perm 0x4B = V+R+X+A（无 U/W）  
+  trampoline：仅内核可读/可执行，用于态切换。
+
+### Speed up system calls（难度：简单）
+
+#### 题目
+
+每个进程创建后，将一个只读页面映射到 USYSCALL（定义在memlayout.h中的虚拟地址）。在该页面的起始处，存储一个struct usyscall（同样定义在memlayout.h中），并将其初始化为当前进程的 PID。在本实验中，用户空间端已提供ugetpid() 函数，它将自动使用 USYSCALL 映射。如果在运行pgtbltest时ugetpid测试用例通过，您将获得本实验此部分的全部学分。  
+
+#### 步骤
+
+- `kernel/proc.h`中定义该页表指针
+```c
+...
+struct proc {
+...
+struct usyscall *usyspgtbl;
+};
+```
+
+- `kernel/proc.c`中改动如下四处：
+```c
+...
+static struct proc*
+allocproc(void)
+{
+  ...
+  // Allocate a trapframe page.
+  if((p->trapframe = (struct trapframe *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  if ((p->usyspgtbl = (struct usyscall *)kalloc()) == 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  memset(p->usyspgtbl, 0, PGSIZE);
+  p->usyspgtbl->pid = p->pid;           // 1 申请只读共享页表 +7行
+  ...
+}
+...
+static void
+freeproc(struct proc *p)
+{
+  ...
+  if(p->pagetable)
+    proc_freepagetable(p->pagetable, p->sz);
+  if (p->usyspgtbl)
+    kfree((void *)p->usyspgtbl);
+  p->usyspgtbl = 0;                     // 2 释放共享页表 +3行
+}
+...
+pagetable_t
+proc_pagetable(struct proc *p)
+{
+  ...
+  // map the trapframe page just below the trampoline page, for
+  // trampoline.S.
+  if(mappages(pagetable, TRAPFRAME, PGSIZE,
+              (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+  
+  if (mappages(pagetable, USYSCALL, PGSIZE,
+               (uint64)(p->usyspgtbl), PTE_R | PTE_U) < 0) {
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }                                     // 3 映射共享页 +7行
+  ...
+}
+
+// Free a process's page table, and free the
+// physical memory it refers to.
+void
+proc_freepagetable(pagetable_t pagetable, uint64 sz)
+{
+  uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+  uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0); // 4 解映射共享页 +1行
+  uvmfree(pagetable, sz);
+}
+...
+```
+
+### Print a page table（难度：简单）
+
+#### 题目
+
+我们添加了一个系统调用kpgtbl()，它会调用 vm.c中的vmprint()。它接受一个pagetable_t参数，你的任务是按照下面描述的格式打印该页表。当您运行print_kpgtbl()测试时，您的实现应该打印以下输出：
+```text
+page table 0x0000000087f22000
+ ..0x0000000000000000: pte 0x0000000021fc7801 pa 0x0000000087f1e000
+ .. ..0x0000000000000000: pte 0x0000000021fc7401 pa 0x0000000087f1d000
+ .. .. ..0x0000000000000000: pte 0x0000000021fc7c5b pa 0x0000000087f1f000
+ .. .. ..0x0000000000001000: pte 0x0000000021fc70d7 pa 0x0000000087f1c000
+ .. .. ..0x0000000000002000: pte 0x0000000021fc6c07 pa 0x0000000087f1b000
+ .. .. ..0x0000000000003000: pte 0x0000000021fc68d7 pa 0x0000000087f1a000
+ ..0xffffffffc0000000: pte 0x0000000021fc8401 pa 0x0000000087f21000
+ .. ..0xffffffffffe00000: pte 0x0000000021fc8001 pa 0x0000000087f20000
+ .. .. ..0xffffffffffffd000: pte 0x0000000021fd4c13 pa 0x0000000087f53000
+ .. .. ..0xffffffffffffe000: pte 0x0000000021fd00c7 pa 0x0000000087f40000
+ .. .. ..0xfffffffffffff000: pte 0x000000002000184b pa 0x0000000080006000
+```
+
+#### 步骤
+
+- `kernel/vm.c`中预留好的`vmprint`函数中实现
+```c
+...
+static inline
+uint64 sext39(uint64 x)
+{
+  if (x & ((uint64)1 << 38)) {
+    x |= (~(uint64)0) << 39;
+  }
+  return x;
+}
+
+static void
+vmprint_rec(const pagetable_t pt, const uint64 va_prefix, const int level)
+{
+  if (level < 0) {
+    return;
+  }
+
+  for (int i = 0; i < 512; ++i) {
+    const pte_t pte = pt[i];
+    if ((pte & PTE_V) == 0) {
+      continue; // 只打印有效项
+    }
+
+    const uint64 pa = PTE2PA(pte);
+    const uint64 va = sext39((uint64)i << PXSHIFT(level) | va_prefix);
+
+    for (int k = 0; k< (3 - level); ++k) {
+      printf(" ..");  // 按深度缩进：顶层1个“ ..”
+    }
+    printf("%p: pte %p pa %p\n",
+           (void *)va, (void *)pte, (void *)pa);
+
+    // 若不是叶子（无 R/W/X），则继续向下打印子页表
+    if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
+      vmprint_rec((pagetable_t)pa, va, level - 1);
+    }
+  }
+}
+
+void
+vmprint(pagetable_t pagetable)
+{
+  // your code here
+  printf("page table %p\n", (void *)pagetable);
+  vmprint_rec(pagetable, 0, 2); // Sv39: 顶层 level=2
+}
+```
+
+### Use superpages（难度：中等/困难）
+
+#### 题目
+
+你的任务是修改 xv6 内核以使用超级页面。具体来说，如果用户程序调用 sbrk() 函数，其大小为 2MB 或更大，并且新创建的地址范围包含一个或多个 2MB 对齐且大小至少为 2MB 的区域，则内核应该使用单个超级页面（而不是数百个普通页面）。如果在运行pgtbltest时superpg_test测试用例通过，你将获得本实验此部分的满分。  
+
+#### 步骤
+
+- `kernel/memlayout.h`中插入宏
+```c
+...
+#define KERNBASE 0x80000000L
+#define PHYSTOP (KERNBASE + 128*1024*1024)
+#define SUPERBASE (KERNBASE + 2 * (1 << 20) * 12) // 超级页起始地址
+...
+```
+
+- `kernel/defs.h`中添加`super`相关声明
+```c
+// kalloc.c
+void*           kalloc(void);
+void            kfree(void *);
+void            kinit(void);
+void*           superalloc(void);
+void            superfree(void *);
+void            superinit(void);
+```
+
+- `kernel/main.c`中添加`superinit`调用
+```c
+...
+void
+main()
+{
+  if (cpuid() == 0) {
+    ...
+    kinit();         // physical page allocator
+    superinit();
+    ...
+}
+```
+
+- `kernel/kalloc.c`改动如下六处
+```c
+...
+struct {
+  struct spinlock lock;
+  struct run *freelist;
+} kmem, supermem;                    // 1 增加超级页实例 修改1行
+
+void
+superfree(void *pa)
+{
+  if ((uint64)pa % SUPERPGSIZE ||
+      (uint64)pa < SUPERBASE ||
+      (uint64)pa >= PHYSTOP) {
+    panic("superfree");
+  }
+
+  memset(pa, 1, SUPERPGSIZE);
+
+  struct run *r = (struct run *)pa;
+  acquire(&supermem.lock);
+  r->next = supermem.freelist;
+  supermem.freelist = r;
+  release(&supermem.lock);
+}                                    // 2 增加超级页释放 +17行
+
+void *
+superalloc(void)
+{
+  struct run *r;
+
+  acquire(&supermem.lock);
+  r = supermem.freelist;
+  if (r) {
+    supermem.freelist = r->next;
+  }
+  release(&supermem.lock);
+
+  if (r) {
+    memset(r, 5, SUPERPGSIZE);
+  }
+  return (void *)r;
+}                                    // 3 增加超级页分配 +17行
+
+void
+superfreerange(void *pa_start, void *pa_end)
+{
+  char *p;
+  p = (char *)SUPERPGROUNDUP((uint64)pa_start);
+  while (p + SUPERPGSIZE <= (char *)pa_end) {
+    superfree(p);
+    p += SUPERPGSIZE;
+  }
+}                                    // 4 增加超级页批量释放 +10行 
+
+void
+superinit(void)
+{
+  initlock(&supermem.lock, "supermem");
+  superfreerange((void *)SUPERBASE, (void *)PHYSTOP);
+}                                    // 5 增加超级页初始化 + 11行
+
+void
+kinit(void)
+{
+  initlock(&kmem.lock, "kmem");
+  freerange(end, (void *)SUPERBASE); // 6 减少普通页空间 修改1行
+}
+```
+
+- `kernel/vm.c`中将几个函数修改至如下所示：
+```c
+...
+pte_t *
+superwalk(pagetable_t pagetable, uint64 va, int alloc) // 新增
+{
+  if (va >= MAXVA) {
+    panic("superwalk");
+  }
+
+  pte_t *pte = pagetable + PX(2, va);
+  if (*pte & PTE_V) {
+    pagetable = (pagetable_t)PTE2PA(*pte);
+    return pagetable + PX(1, va);
+  } else {
+    if (!alloc || (pagetable = (pte_t *)kalloc()) == 0) {
+      return 0;
+    }
+    memset(pagetable, 0, PGSIZE);
+    *pte = PA2PTE(pagetable) | PTE_V;
+    return pagetable + PX(0, va);
+  }
+}
+...
+int
+mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm) // 修改
+{
+  uint64 a, last;
+  uint64 sz = PGSIZE;
+  pte_t *pte;
+
+#ifdef LAB_PGTBL
+  if (pa >= SUPERBASE) {
+    sz = SUPERPGSIZE;
+  }
+#endif
+
+  if((va % sz) != 0)
+    panic("mappages: va not aligned");
+
+  if((size % sz) != 0)
+    panic("mappages: size not aligned");
+
+  if(size == 0)
+    panic("mappages: size");
+  
+  a = va;
+  last = va + size - sz;
+  for(;;){
+#ifndef LAB_PGTBL
+      if((pte = walk(pagetable, a, 1)) == 0) {
+        return -1;
+      }
+#else
+      if (sz == PGSIZE) {
+        if ((pte = walk(pagetable, a, 1)) == 0) {
+          return -1;
+        }
+      } else if ((pte = superwalk(pagetable, a, 1)) == 0) {
+        return -1;
+      }
+#endif
+    
+    if(*pte & PTE_V)
+      panic("mappages: remap");
+    *pte = PA2PTE(pa) | perm | PTE_V;
+    if(a == last)
+      break;
+    a += sz;
+    pa += sz;
+  }
+  return 0;
+}
+...
+void
+uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) // 修改
+{
+  uint64 a;
+  pte_t *pte;
+  int sz;
+
+  if((va % PGSIZE) != 0)
+    panic("uvmunmap: not aligned");
+
+  for(a = va, sz = PGSIZE; a < va + npages*PGSIZE; a += sz){
+    if((pte = walk(pagetable, a, 0)) == 0)
+      panic("uvmunmap: walk");
+    if((*pte & PTE_V) == 0) {
+      printf("va=%ld pte=%ld\n", a, *pte);
+      panic("uvmunmap: not mapped");
+    }
+    if(PTE_FLAGS(*pte) == PTE_V)
+      panic("uvmunmap: not a leaf");
+    uint64 pa = PTE2PA(*pte);
+#ifdef LAB_PGTBL
+    if (pa >= SUPERBASE) {
+      a += SUPERPGSIZE - sz;
+    }
+#endif
+    if(do_free){
+#ifndef LAB_PGTBL
+      kfree((void*)pa);
+#else
+      if (pa >= SUPERBASE) {
+        superfree((void *)pa);
+      } else {
+        kfree((void *)pa);
+      }
+#endif
+    }
+    *pte = 0;
+  }
+}
+...
+uint64
+uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm) // 修改
+{
+  char *mem;
+  uint64 a;
+  int sz;
+
+  if(newsz < oldsz)
+    return oldsz;
+
+  oldsz = PGROUNDUP(oldsz);
+  for(a = oldsz, sz = PGSIZE;
+#ifndef LAB_PGTBL
+      a < newsz;
+#else
+      a < SUPERPGROUNDUP(oldsz) && a < newsz; // 利用超级页对齐浪费的空间
+#endif
+      a += sz){
+    mem = kalloc();
+    if(mem == 0){
+      uvmdealloc(pagetable, a, oldsz);
+      return 0;
+    }
+#ifndef LAB_SYSCALL
+    memset(mem, 0, sz);
+#endif
+    if(mappages(pagetable, a, sz, (uint64)mem, PTE_R|PTE_U|xperm) != 0){
+      kfree(mem);
+      uvmdealloc(pagetable, a, oldsz);
+      return 0;
+    }
+  }
+#ifdef LAB_PGTBL
+  // 尝试申请超级页
+  for (sz = SUPERPGSIZE; a + SUPERPGSIZE < newsz; a += sz) {
+    mem = superalloc();
+    if (mem == 0) {
+      break;
+    }
+    memset(mem, 0, sz);
+    if (mappages(pagetable, a, sz, (uint64)mem, PTE_R | PTE_U | xperm) != 0) {
+      superfree(mem);
+      uvmdealloc(pagetable, a, oldsz);
+      return 0;
+    }
+  }
+  // 普通页补齐剩余空间
+  for (sz = PGSIZE; a < newsz; a += sz) {
+    mem = kalloc();
+    if (mem == 0) {
+      uvmdealloc(pagetable, a, oldsz);
+      return 0;
+    }
+    memset(mem, 0, sz);
+    if (mappages(pagetable, a, sz, (uint64)mem, PTE_R | PTE_U | xperm) != 0) {
+      kfree(mem);
+      uvmdealloc(pagetable, a, oldsz);
+      return 0;
+    }
+  }
+#endif
+  return newsz;
+}
+...
+int
+uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) // 修改
+{
+  pte_t *pte;
+  uint64 pa, i;
+  uint flags;
+  char *mem;
+  int szinc;
+
+  for(i = 0; i < sz; i += szinc){
+    szinc = PGSIZE;
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+#ifndef LAB_PGTBL
+    if((mem = kalloc()) == 0)
+      goto err;
+#else
+    if (pa >= SUPERBASE) {
+      szinc = SUPERPGSIZE;
+      if ((mem = superalloc()) == 0) {
+        goto err;
+      }
+    } else if ((mem = kalloc()) == 0) {
+      goto err;
+    }
+#endif
+    memmove(mem, (char *)pa, szinc);
+    if(mappages(new, i, szinc, (uint64)mem, flags) != 0){
+#ifndef LAB_PGTBL
+      kfree(mem);
+#else
+      if (szinc == PGSIZE) {
+        kfree(mem);
+      } else {
+        superfree(mem);
+      }
+#endif
+      goto err;
+    }
+  }
+  return 0;
+
+ err:
+  uvmunmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
+...
+```
+
+### 测试
+
+![pgtbl测试结果](./img/pgtbl.png)
 
