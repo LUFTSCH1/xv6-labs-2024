@@ -881,7 +881,7 @@ main(int argc, char *argv[])
 
 ## Lab: page tables（git checkout pgtbl）
 
-### Inspect a user-process page table（难度：简单）
+### Inspect a user-process page table（`answers-pgtbl.txt` 难度：简单）
 
 #### 题目
 
