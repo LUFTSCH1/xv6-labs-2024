@@ -488,9 +488,43 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 
 
 #ifdef LAB_PGTBL
+static void
+vmprint_rec(pagetable_t pt, int level) // 加入该递归函数
+{
+  if (level < 0) {
+    return;
+  }
+
+  for (int i = 0; i < 512; ++i) {
+    const pte_t pte = pt[i];
+    if ((pte & PTE_V) == 0) {
+      continue; // 只打印有效项
+    }
+
+    const uint64 pa = PTE2PA(pte);
+    uint64 va = ((uint64)i) << PXSHIFT(level);
+    // Sv39: 对39位地址做符号扩展（把位38当作符号位）
+    va = ((long long)(va << (64 - 39))) >> (64 - 39);
+
+    for (int k = 0; k< (3 - level); ++k) {
+      printf(" ..");  // 按深度缩进：顶层1个“ ..”
+    }
+    printf("%p: pte %p pa %p\n",
+           (void *)va, (void *)pte, (void *)pa);
+
+    // 若不是叶子（无 R/W/X），则继续向下打印子页表
+    if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
+      vmprint_rec((pagetable_t)pa, level - 1);
+    }
+  }
+}
+
 void
-vmprint(pagetable_t pagetable) {
+vmprint(pagetable_t pagetable)
+{
   // your code here
+  printf("page table %p\n", (void *)pagetable);
+  vmprint_rec(pagetable, 2);   // Sv39: 顶层 level=2
 }
 #endif
 
@@ -498,7 +532,8 @@ vmprint(pagetable_t pagetable) {
 
 #ifdef LAB_PGTBL
 pte_t*
-pgpte(pagetable_t pagetable, uint64 va) {
+pgpte(pagetable_t pagetable, uint64 va)
+{
   return walk(pagetable, va, 0);
 }
 #endif
