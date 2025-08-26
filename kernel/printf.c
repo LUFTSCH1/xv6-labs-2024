@@ -176,3 +176,23 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void
+backtrace(void)
+{
+  printf("backtrace:\n");
+  uint64 ra, fp = r_fp();
+
+  // 获取上一个帧指针（fp-8是返回地址，fp-16是上一个函数的帧指针）
+  uint64 pre_fp = *((uint64 *)(fp - 16));
+
+  // 上一个帧指针和当前帧指针还在同一个物理页中则继续回溯
+  while (PGROUNDDOWN(fp) == PGROUNDDOWN(pre_fp)) {
+    ra = *(uint64 *)(fp - 8);
+    printf("%p\n", (void *)ra);
+    fp = pre_fp;
+    pre_fp = *((uint64 *)(fp - 16));
+  }
+  ra = *(uint64 *)(fp - 8);
+  printf("%p\n", (void *)ra);
+}
