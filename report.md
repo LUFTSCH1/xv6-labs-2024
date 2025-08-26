@@ -1701,3 +1701,223 @@ sigreturn(void)
 
 ![traps测试结果](./img/traps.png)
 
+## Lab: Copy-on-Write Fork for xv6（git checkout cow）
+
+### Implement copy-on-write fork（难度：困难）
+
+#### 题目
+
+你的任务是在 xv6 内核中实现写时复制 fork。如果修改后的内核能够成功执行 cowtest 和 usertests -q 程序，则任务完成。  
+
+#### 步骤
+
+- `kernel/defs.h`中添加函数声明：
+```c
+...
+// kalloc.c
+...
+uint64          refidx(uint64);
+void            refup(void *);
+void            refdown(void *);
+void*           copypa(void *);
+...
+// vm.c
+...
+void            copyonwrite(pagetable_t, uint64);
+int             iscowpage(pagetable_t, uint64);
+...
+```
+
+- `kernel/riscv.h`中添加`PTE_COW`宏：
+```c
+...
+#define PTE_V (1L << 0) // valid
+...
+#define PTE_COW (1L << 8)
+...
+```
+
+- `kernel/kalloc.c`中修改如下八处：
+```c
+...
+struct {
+  struct spinlock lock;
+  int table[(PHYSTOP - KERNBASE) / PGSIZE];
+} pmref;                            // 1 添加引用计数实例 +4行
+
+void
+kinit()
+{
+  initlock(&kmem.lock, "kmem");
+  initlock(&pmref.lock, "pmref");   // 2 初始化锁 +1行
+  freerange(end, (void*)PHYSTOP);
+}
+...
+void
+kfree(void *pa)
+{
+  struct run *r;
+
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("kfree");
+
+  acquire(&pmref.lock);
+  if (--pmref.table[refidx((uint64)pa)] < 1) {
+    memset(pa, 1, PGSIZE);
+    r = (struct run *)pa;
+    
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+  }
+  release(&pmref.lock);             // 3 修改释放逻辑，归零释放
+}
+...
+void *
+kalloc(void)
+{
+  ...
+  if (r) {
+    memset((char*)r, 5, PGSIZE); // fill with junk
+    pmref.table[refidx((uint64)r)] = 1;
+  }                                 // 4 修改if(r)中的逻辑
+  return (void*)r;
+}
+
+uint64
+refidx(uint64 pa)
+{
+  return (pa - KERNBASE) / PGSIZE;
+}                                   // 5 添加refidx定义 +5行
+
+void
+refup(void *pa)
+{
+  acquire(&pmref.lock);
+  ++pmref.table[refidx((uint64)pa)];
+  release(&pmref.lock);
+}                                   // 6 添加refup定义 +7行
+
+void
+refdown(void *pa)
+{
+  acquire(&pmref.lock);
+  --pmref.table[refidx((uint64)pa)];
+  release(&pmref.lock);
+}                                   // 7 添加refdown定义 +7行
+
+void*
+copypa(void *pa)
+{
+  acquire(&pmref.lock);
+  int *pn = pmref.table + refidx((uint64)pa);
+  if (*pn == 1) {
+    release(&pmref.lock);
+    return pa;
+  }
+  char *new = (char *)kalloc();
+  if (new == (char *)0) {
+    release(&pmref.lock);
+    panic("copypa: out of mem");
+  }
+  memmove((void *)new, pa, PGSIZE);
+  --*pn;
+  release(&pmref.lock);
+
+  return (void *)new;
+}                                   // 8 添加copypa定义 +20行
+```
+
+- `kernel/trap.c`中修改`usertrap`判断逻辑：
+```c
+...
+void
+usertrap(void)
+{
+  ...
+  } else if((which_dev = devintr()) != 0){
+    // ok
+  } else if ((r_scause() == 15 || r_scause() == 13) &&
+             iscowpage(p->pagetable, r_stval())) {
+    copyonwrite(p->pagetable, r_stval()); // 这里插入一个分支
+  } else {
+  ...
+}
+...
+```
+
+- `kernel/vm.c`中修改如下四处：
+```c
+...
+int
+uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
+{
+  ...
+    pa = PTE2PA(*pte);
+    if (*pte & PTE_W) {
+      *pte &= ~PTE_W;
+      *pte |= PTE_COW;
+    }
+    flags = PTE_FLAGS(*pte);
+    if (mappages(new, i, PGSIZE, (uint64)pa, flags)) {
+      goto err;
+    }
+    refup((void *)pa);         // 1 修改成这9行
+  }
+  return 0;
+
+ err:
+  uvmunmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
+...
+int
+copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
+{
+  ...
+    if(va0 >= MAXVA)
+      return -1;
+    if (iscowpage(pagetable, va0)) {
+      copyonwrite(pagetable, va0);
+    }                          // 2 添加cow判断 +3行
+  ...
+}
+...
+void
+copyonwrite(pagetable_t pagetable, uint64 va)
+{
+  va = PGROUNDDOWN(va);
+  pte_t *pte = walk(pagetable, va, 0);
+  uint64 pa = PTE2PA(*pte);
+
+  void *new = copypa((void *)pa);
+  uint64 flags = (PTE_FLAGS(*pte) | PTE_W) & (~PTE_COW);
+
+  uvmunmap(pagetable, va, 1, 0);
+  if (mappages(pagetable, va, PGSIZE, (uint64)new, flags)) {
+    kfree(new);
+    panic("copyonwrite");
+  }
+}                              // 3 添加copyonwrite定义 +16行
+
+int
+iscowpage(pagetable_t pagetable, uint64 va)
+{
+  if(va >= MAXVA) {
+    return 0;
+  }
+  va = PGROUNDDOWN(va);
+  pte_t *pte = walk(pagetable, va, 0);
+  return
+    pte && (*pte & PTE_V) && (*pte & PTE_U) &&
+    (*pte & PTE_COW) && !(*pte & PTE_W); // 有效用户只读COW页
+}                              // 4 添加iscowpage +12行
+```
+
+### 测试
+
+![cow测试结果](./img/cow.png)
+
+## Lab: networking（git checkout net）
+
