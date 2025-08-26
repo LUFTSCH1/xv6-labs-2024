@@ -242,7 +242,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   if((va % PGSIZE) != 0)
     panic("uvmunmap: not aligned");
 
-  for(a = va, sz = PGSIZE; a < va + npages*PGSIZE; a += sz){
+  for(a = va; a < va + npages*PGSIZE; a += sz){
+    sz = PGSIZE;
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0) {
@@ -254,7 +255,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     uint64 pa = PTE2PA(*pte);
 #ifdef LAB_PGTBL
     if (pa >= SUPERBASE) {
-      a += SUPERPGSIZE - sz;
+      sz = SUPERPGSIZE;
     }
 #endif
     if(do_free){
