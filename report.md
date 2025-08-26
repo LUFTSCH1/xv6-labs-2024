@@ -16,15 +16,6 @@
 
 ### 配置`WSL发行版`
 
-#### 准备编辑器智能提示支持
-
-```bash
-sudo apt install -y clangd bear
-```
-简单解释一下安装内容：  
-  * `clangd`：语言服务器核心  
-  * `bear`：编译指令捕获工具   
-
 #### 官方要求的项目环境配置
 
 按照官网说明，需要安装一些工具，命令如下：
@@ -56,7 +47,6 @@ riscv64-unknown-linux-gnu-gcc --version
 ### 编辑器（`Visual Studio Code`）配置
 
 `Visual Studio Code`安装在物理机中。在插件栏搜索并安装`WSL`插件，完成后左边栏将多出一个图标，为`远程资源管理器`。点击`远程资源管理器`，选择`WSL目标`中`Debian发行版`对应的选项进行连接。连接完成后若没有显示终端，则在左上角`查看`菜单中打开`终端`，现在可以在编辑器的终端中操作Linux子系统了。  
-另外，需要智能提示和自动代码补全，在编辑器的插件栏中搜索并安装`Clangd`插件。  
 
 ### 拉取实验仓库
 
@@ -77,35 +67,9 @@ __pycache__/
 compile_commands.json
 *.pdf
 ```
-推送到远程仓库时，如需特殊网络环境，直接使用物理机代理软件的`虚拟网卡`（`TUN`）模式即可。  
-
-在项目根目录（`~/xv6-labs-2024`）中新建`.vscode`目录，在里面新建`settings.json`文件，内容如下（需要修改对应部分）：  
-```json
-{
-  "editor.tabSize": 2,
-  "editor.insertSpaces": true,
-  "files.encoding" : "utf8",
-  "files.eol" : "\n",
-  "editor.formatOnSave": false,
-  "clangd.path": "/usr/bin/clangd",
-  "clangd.arguments": [
-    "--background-index",
-    "--compile-commands-dir=${Linux子系统中你的项目路径}",
-    "--query-driver=/usr/bin/gcc",
-    "--header-insertion=never"
-  ]
-}
-``` 
+推送到`GitHub`远程仓库时，如需特殊网络环境，直接使用物理机代理软件的`虚拟网卡`（`TUN`）模式即可。  
 
 ### 第一次构建
-
-#### 第一次的例外
-
-```bash
-bear -- make qemu  # 构建命令
-bear -- make clean # 清除命令
-```
-第一次构建使用以上命令中的构建命令，让`Clangd`知晓`-I.`参数，正确解析`kernel`和`user`目录。这样编辑器的自动缩进和`Clangd` Server就配置好了，打开一个C源程序，应当没有报错标红。  
 
 #### 实验指导使用的命令
 
@@ -130,7 +94,7 @@ make qemu
 | `int write(int fd, const void *buf, int n)` | 向文件描述符`fd`写入`buf`开始的`n`字节数据；返回n |
 | `int read(int fd, void *buf, int n)` | 从文件描述符`fd`读取`n`字节数据存入`buf`；返回读取字节数，如已到文件末尾返回0 |
 | `int close(int fd)` | 释放打开的文件`fd`；成功返回0，失败返回-1 |
-| `int dup(int fd)` | 返回和`fd`指向相同文件的新文件描述符 |
+| `int dup(int fd)` | 找到进程`fd表`里最小的一个没用的槽位，复制`fd`指向的打开文件对象到这个新槽；返回新`fd` |
 | `int pipe(int *p)` | 创建一个管道，将读、写文件描述符分别放入`p[0]`、`p[1]`；创建成功返回0，失败返回-1 |
 | `int chdir(const char *dir)` | 修改当前进程的工作目录；成功返回0，失败返回-1 |
 | `int mkdir(const char *dir)` | 新建目录；成功返回0，失败返回-1 |
@@ -179,9 +143,13 @@ main(int argc, char *argv[])
 
 接着在项目根目录`Makefile`文件第180行的`UPROGS`项下追加：  
 ```makefile
-$U/_sleep\ # 即 $U/_{不带.c后缀的文件名}\
+...
+UPROGS=\
+  ...
+  $U/_sleep\ # 即 $U/_{不带.c后缀的文件名}\
+...
 ```
-保存后使用前面提到的`make qemu`命令构建即可。  
+保存后使用前面提到的`make qemu`命令构建即可。`util`中每个实验都要做这步操作。  
 
 除了在`xv6`内核的命令行界面手动输入`sleep 10`之类的命令进行测试之外，还需要通过测试脚本，测试的方法是在项目根目录下输入命令：  
 ```bash
@@ -190,9 +158,7 @@ $U/_sleep\ # 即 $U/_{不带.c后缀的文件名}\
 如无执行权限，则`chmod`追加执行权限后再尝试：  
 ```bash
 chmod +x ./grade-lab-util
-```
-
-以上构建和测试方法后续通用，无特殊情况将不重复说明。  
+```  
 
 ### pingpong（`user/pingpong.c` 难度：easy）
 
@@ -705,13 +671,16 @@ num = *(int *)0;
 
 - `Makefile`中添加`trace`
 ```makefile
+...
 UPROGS=\
 	...
 	$U/_trace\
+...
 ```
 
 - `user/user.h`中添加函数声明
 ```c
+...
 // system calls
 int fork(void);
 ...
@@ -719,17 +688,20 @@ int trace(int);
 ```
 
 - `user/usys.pl`中添加系统调用存根
-```pl
+```perl
+...
 entry("trace");
 ```
 
 - `kernel/syscall.h`中添加系统调用号
 ```c
+...
 #define SYS_trace 22
 ```
 
 - `kernel/proc.h`中添加`proc`结构体成员储存掩码
 ```c
+...
 struct proc {
   ...
   int tmask; // Trace mask
@@ -739,6 +711,7 @@ struct proc {
 
 - `kernel/sysproc.c`末尾定义`sys_trace`函数
 ```c
+...
 uint64
 sys_trace(void)
 {
@@ -751,16 +724,18 @@ sys_trace(void)
 
 - `kernel/proc.c`中修改`fork`函数定义
 ```c
+...
 int
 fork(void)
 {
   ...
   np->cwd = idup(p->cwd);
-  np->tmask = p->tmask;
+  np->tmask = p->tmask; // 添加该行
 
   safestrcpy(np->name, p->name, sizeof(p->name));
   ...
 }
+...
 ```
 
 - `kernel/syscall.c`中修改如下标注的四处
@@ -1287,7 +1262,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) // 修改
   if((va % PGSIZE) != 0)
     panic("uvmunmap: not aligned");
 
-  for(a = va, sz = PGSIZE; a < va + npages*PGSIZE; a += sz){
+  for(a = va; a < va + npages*PGSIZE; a += sz){
+    sz = PGSIZE;
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0) {
@@ -1299,7 +1275,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) // 修改
     uint64 pa = PTE2PA(*pte);
 #ifdef LAB_PGTBL
     if (pa >= SUPERBASE) {
-      a += SUPERPGSIZE - sz;
+      sz = SUPERPGSIZE;
     }
 #endif
     if(do_free){
@@ -1437,4 +1413,291 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) // 修改
 ### 测试
 
 ![pgtbl测试结果](./img/pgtbl.png)
+
+## Lab: traps（git checkout traps）
+
+### RISC-V assembly（`answers-traps.txt` 难度：简单）
+
+#### Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+
+  - `a0`-`a5`寄存器，13存在`a2`中。
+
+#### Where is the call to function f in the assembly code for main? Where is the call to g? (Hint: the compiler may inline functions.)
+
+  - `26: 45b1                	li	a1,12`编译器直接计算出了固定结果，改为加载立即数。
+
+#### At what address is the function printf located?
+
+  - `6be: 711d                	add	sp,sp,-96`，在`0x6be`处。
+
+#### What value is in the register ra just after the jalr to printf in main?
+
+  - 是`main`中`printf`调用的下一条指令，`0x34`。
+
+#### What is the output after run the following code? The output depends on that fact that the RISC-V is little-endian. If the RISC-V were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+```c
+unsigned int i = 0x00646c72;
+printf("H%x Wo%s", 57616, (char *) &i);
+```
+
+  - 输出`He110 World`，大端模式需要改为`0x726c6400`，即反转字节顺序。
+
+#### In the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) Why does this happen?
+```c
+printf("x=%d y=%d", 3);
+```
+
+  - 未定义行为，就函数调用规则而言取决于`a2`寄存器在这时候的值，但是该值为垃圾数据。
+
+### Backtrace（难度：中等）
+
+#### 题目
+
+对于调试来说，通常情况下，进行回溯会很有用：即在发生错误的位置之上，堆栈上所有函数调用的列表。为了辅助回溯，编译器会生成机器码，并在堆栈上维护一个与当前调用链中每个函数对应的堆栈帧。每个堆栈帧由返回地址和指向调用者堆栈帧的“帧指针”组成。寄存器`s0`包含一个指向当前堆栈帧的指针（它实际上指向堆栈上已保存的返回地址的地址加 8）。您的回溯 应该使用帧指针遍历堆栈，并在每个堆栈帧中打印已保存的返回地址。  
+
+#### 步骤
+
+- `kernel/defs.h`中添加`backtrace`声明
+```c
+...
+// printf.c
+int             printf(char*, ...) __attribute__ ((format (printf, 1, 2)));
+void            panic(char*) __attribute__((noreturn));
+void            printfinit(void);
+void            backtrace(void);
+...
+```
+
+- `kernel/riscv.h`的`#ifndef __ASSEMBLER__`条件编译中找个位置加上
+```c
+static inline uint64
+r_fp()
+{
+  uint64 x;
+  asm volatile("mv %0, s0" : "=r" (x) );
+  return x;
+}
+```
+
+- `kernel/printf.c`中添加`backtrace`定义
+```c
+void
+backtrace(void)
+{
+  printf("backtrace:\n");
+  uint64 ra, fp = r_fp();
+
+  // 获取上一个帧指针（fp-8是返回地址，fp-16是上一个函数的帧指针）
+  uint64 pre_fp = *((uint64 *)(fp - 16));
+
+  // 上一个帧指针和当前帧指针还在同一个物理页中则继续回溯
+  while (PGROUNDDOWN(fp) == PGROUNDDOWN(pre_fp)) {
+    ra = *(uint64 *)(fp - 8);
+    printf("%p\n", (void *)ra);
+    fp = pre_fp;
+    pre_fp = *((uint64 *)(fp - 16));
+  }
+  ra = *(uint64 *)(fp - 8);
+  printf("%p\n", (void *)ra);
+}
+```
+
+- `kernel/sysproc.c`的`sys_sleep`开头添加`backtrace`调用
+```c
+void
+sys_sleep(void)
+{
+  backtrace();
+  ...
+}
+```
+
+### Alarm（难度：困难）
+
+#### 题目
+
+您应该添加一个新的sigalarm(interval, handler)系统调用。如果应用程序调用sigalarm(n, fn)，则 程序每消耗 n 个CPU 时间“刻”，内核就会触发调用应用程序函数fn 。当fn返回时，应用程序应该从中断处继续执行。刻是 xv6 中一个相当随意的时间单位，由硬件定时器生成中断的频率决定。如果应用程序调用sigalarm(0, 0)，内核应该停止生成周期性的 alarm 调用。  
+
+#### 步骤
+
+- `Makefile`中添加：
+```makefile
+...
+UPROGS=\
+  ...
+	$U/_alarmtest\
+...
+```
+
+- `user/usys.pl`中添加：
+```perl
+...
+entry("sigalarm");
+entry("sigreturn");
+```
+
+- `user/user.h`中添加声明：
+```c
+...
+// system calls
+...
+int sigalarm(int, void (*)());
+int sigreturn(void);
+...
+```
+
+- `kernel/syscall.h`中添加系统调用号：
+```c
+...
+#define SYS_sigalarm  22
+#define SYS_sigreturn 23
+```
+
+- `kernel/syscall.c`中添加声明和函数指针数组项：
+```c
+// Prototypes for the functions that handle system calls.
+...
+extern uint64 sys_sigalarm(void);
+extern uint64 sys_sigreturn(void);
+...
+static uint64 (*syscalls[])(void) = {
+...
+[SYS_sigalarm]  sys_sigalarm,
+[SYS_sigreturn] sys_sigreturn
+}
+...
+```
+
+- `kernel/proc.h`中`proc`结构体添加成员：
+```c
+...
+struct proc {
+  ...
+  uint64 interval;       // 时间间隔
+  void (*handler)();     // 定时处理函数
+  uint64 ticks;          // 节拍数
+  struct trapframe *atf; // 恢复trapframe使用
+  int alarming;          // 判断是否正在alarm
+  ...
+};
+```
+
+- `kernel/proc.c`中修改如下三处：
+```c
+...
+static struct proc*
+allocproc(void)
+{
+  ...
+found:
+  p->pid = allocpid();
+  p->state = USED;
+
+  if ((p->atf = (struct trapframe *)kalloc()) == 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  p->interval = 0;
+  p->handler = 0;
+  p->ticks = 0;
+  p->alarming = 0;                 // 1 申请atf、初始化成员 +9行
+  ...
+}
+...
+static void
+freeproc(struct proc *p)
+{
+  if(p->trapframe)
+    kfree((void*)p->trapframe);
+  p->trapframe = 0;
+  if (p->atf)
+    kfree((void *)p->atf);
+  p->atf = 0;                      // 2 释放atf +3行
+  if(p->pagetable)
+    proc_freepagetable(p->pagetable, p->sz);
+  p->pagetable = 0;
+  p->interval = 0;
+  p->handler = 0;
+  p->ticks = 0;
+  p->alarming = 0;                 // 3 设置成员空 +4行
+  ...
+}
+...
+```
+
+- `kernel/defs.h`中添加`sigalarm`和`sigreturn`声明：
+```c
+...
+// trap.c
+...
+int sigalarm(int, void (*)());
+int sigreturn(void);
+...
+```
+
+- `kernel/sysproc.c`中添加`sys_sigalarm`和`sys_sigreturn`定义：
+```c
+...
+uint64
+sys_sigalarm(void)
+{
+  int interval;
+  argint(0, &interval);
+  uint64 handler;
+  argaddr(1, &handler);
+  return sigalarm(interval, (void (*)())handler);
+}
+
+uint64
+sys_sigreturn(void)
+{
+  return sigreturn();
+}
+```
+
+- `kernel/trap.c`中修改如下三处：
+```c
+...
+void
+usertrap(void)
+{
+  ...
+  // give up the CPU if this is a timer interrupt.
+  if (which_dev == 2) {
+    if (p->interval && p->ticks++ == p->interval && !p->alarming) {
+      p->ticks = 0;
+      *p->atf = *p->trapframe;
+      p->trapframe->epc = (uint64)p->handler;
+      p->alarming = 1;
+    }
+    yield();
+  }                       // 1 修改 if (which_dev == 2)逻辑
+
+  usertrapret();
+}
+...
+int
+sigalarm(int interval, void (*handler)())
+{
+  struct proc *p = myproc();
+  p->interval = interval;
+  p->handler = handler;
+  p->ticks = 0;
+  return 0;
+}                         // 2 添加sigalarm定义 +9行
+
+int
+sigreturn(void)
+{
+  struct proc *p = myproc();
+  *p->trapframe = *p->atf;
+  p->alarming = 0;
+  return p->trapframe->a0;
+}                         // 3 添加sigreturn定义 +8行
+```
+
+### 测试
+
+![traps测试结果](./img/traps.png)
 
