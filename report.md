@@ -1921,3 +1921,354 @@ iscowpage(pagetable_t pagetable, uint64 va)
 
 ## Lab: networking（git checkout net）
 
+### Part One: NIC（`kernel/e1000.c` 难度：中等）
+
+#### 题目
+
+你的任务是完成`kernel/e1000.c`文件中的`e1000_transmit()`和`e1000_recv()`函数，使驱动程序能够发送和接收数据包。当`make grade`提示你的解决方案通过了“txone”和“rxone”测试时， 这部分就完成了。  
+
+#### 代码
+
+```c
+...
+int
+e1000_transmit(char *buf, int len)
+{
+  acquire(&e1000_lock);
+
+  uint32 idx = regs[E1000_TDT];
+  struct tx_desc *d = &tx_ring[idx];
+
+  // 若该槽尚未完成上一次发送（DD未置位），队列满
+  if ((d->status & E1000_TXD_STAT_DD) == 0) {
+    release(&e1000_lock);
+    return -1;
+  }
+
+  // 上一轮在这个槽位挂过的缓冲区已发送完成，释放之
+  if (tx_bufs[idx]) {
+    kfree(tx_bufs[idx]);
+    tx_bufs[idx] = 0;
+  }
+
+  // 填充本次要发送的以太帧
+  d->addr   = (uint64)buf;
+  d->length = len;
+  d->cmd    = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS; // 单包结束 + 回写状态
+  d->status = 0; // 交给硬件，等待其置DD
+
+  // 记录缓冲区指针，等硬件置DD后在下次复用该槽位时释放
+  tx_bufs[idx] = buf;
+
+  // 推进环指针
+  regs[E1000_TDT] = (idx + 1) % TX_RING_SIZE;
+
+  release(&e1000_lock);
+  return 0;
+}
+
+static void
+e1000_recv(void)
+{
+  while (1) {
+    acquire(&e1000_lock);
+
+    // 硬件写回的下一包位于 (RDT + 1) % N
+    uint32 idx = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+    struct rx_desc *d = &rx_ring[idx];
+
+    // 没有新包
+    if ((d->status & E1000_RXD_STAT_DD) == 0) {
+      release(&e1000_lock);
+      break;
+    }
+
+    // 取出这包对应的缓冲区与长度
+    char *buf = rx_bufs[idx];
+    int len = d->length;
+
+    // 为该槽位补一个新的缓冲区，让硬件继续写入
+    char *nbuf = (char *)kalloc();
+    if (!nbuf)
+      panic("e1000 rx kalloc");
+    rx_bufs[idx] = nbuf;
+    d->addr = (uint64)nbuf;
+
+    // 清状态并把该槽位交还硬件
+    d->status = 0;
+    regs[E1000_RDT] = idx;
+
+    release(&e1000_lock);
+
+    // 在锁外把收到的包递交给上层；上层处理完会负责 kfree(buf)
+    net_rx(buf, len);
+  }
+}
+...
+```
+
+### Part Two: UDP Receive（`kernel/net.c` 难度：中等）
+
+#### 题目
+
+你的任务是在kernel/net.c 文件中实现 ip_rx()、 sys_recv()和 sys_bind() 函数。当make grade提示你的解决方案通过所有测试时，你就完成了。  
+
+#### 代码
+
+```c
+...
+// ---- UDP RX per-port bounded queues ----
+#define UDP_Q_LIMIT    16 // 每端口最多缓存16个包（实验要求）
+#define UDP_PORT_SLOTS 32 // 同时允许绑定的端口槽位数（够本实验用）
+
+struct udp_pkt {
+  uint32 sip;   // 源IP（host序）
+  uint16 sport; // 源端口（host序）
+  int len;      // 负载长度
+  char *buf;    // 指向整帧缓冲（ETH+IP+UDP+payload）
+};
+
+struct udp_portq {
+  int used;
+  uint16 port;   // host序
+  int owner_pid; // 绑定者
+  struct spinlock lock;
+  struct udp_pkt q[UDP_Q_LIMIT];
+  int r, w, n;
+};
+
+static struct udp_portq upq[UDP_PORT_SLOTS];
+static struct spinlock upqmap_lock;
+
+static struct udp_portq*
+find_portq(uint16 port)
+{
+  for (int i = 0; i < UDP_PORT_SLOTS; ++i) {
+    if(upq[i].used && upq[i].port == port) {
+      return &upq[i];
+    }
+  }
+  return 0;
+}                              // 1 在netinit函数前添加这些
+
+void
+netinit(void)
+{
+  initlock(&netlock, "netlock");
+  initlock(&upqmap_lock, "udp-port-map");
+  for (struct udp_portq *up = upq, *end = upq + UDP_PORT_SLOTS;
+       up < end; ++up) {
+    initlock(&up->lock, "udp-portq");
+    up->used = 0;
+    up->r = 0;
+    up->w = 0;
+    up->n = 0;
+  }
+}                              // 2 修改netinit函数
+...
+uint64
+sys_bind(void)
+{
+  int port_s;
+  argint(0, &port_s);
+  uint16 port = (uint16)port_s;
+  struct proc *p = myproc();
+
+  acquire(&upqmap_lock);
+  struct udp_portq *pq = find_portq(port);
+  if (pq) {
+    int ok = pq->owner_pid == p->pid;
+    release(&upqmap_lock);
+    return ok ? 0 : -1; // 已被本进程绑定则幂等成功，否则冲突
+  }
+  // 分配空槽
+  for (struct udp_portq *up = upq, *end = upq + UDP_PORT_SLOTS;
+       up < end; ++up) {
+    if (!up->used) {
+      acquire(&up->lock);
+      up->used = 1;
+      up->port = port;
+      up->owner_pid = p->pid;
+      up->r = 0;
+      up->w = 0;
+      up->n = 0;
+      release(&up->lock);
+      release(&upqmap_lock);
+      return 0;
+    }
+  }
+  release(&upqmap_lock);
+  return -1; // 没有可用槽位
+}                              // 3 完成sys_bind函数
+...
+uint64
+sys_unbind(void)
+{
+  int port_s;
+  argint(0, &port_s);
+  uint16 port = (uint16)port_s;
+  struct proc *p = myproc();
+
+  acquire(&upqmap_lock);
+  struct udp_portq *pq = find_portq(port);
+  if (!pq || pq->owner_pid != p->pid) {
+    release(&upqmap_lock);
+    return -1;
+  }
+  acquire(&pq->lock);
+  while (pq->n > 0) {
+    struct udp_pkt *slot = &pq->q[pq->r];
+    if (slot->buf) {
+      kfree(slot->buf);
+    }
+    slot->buf = 0;
+    slot->len = 0;
+    pq->r = (pq->r + 1) % UDP_Q_LIMIT;
+    --pq->n;
+  }
+  pq->used = 0;
+  release(&pq->lock);
+  release(&upqmap_lock);
+  return 0;
+}                              // 4 完成sys_unbind函数
+...
+uint64
+sys_recv(void)
+{
+  int dport_s;
+  int maxlen;
+  uint64 u_src;
+  uint64 u_sport;
+  uint64 u_buf;
+  argint(0, &dport_s);
+  argaddr(1, &u_src);
+  argaddr(2, &u_sport);
+  argaddr(3, &u_buf);
+  argint(4, &maxlen);
+
+  uint16 dport = (uint16)dport_s;
+  acquire(&upqmap_lock);
+  struct udp_portq *pq = find_portq(dport);
+  release(&upqmap_lock);
+  if (!pq) {
+    return -1; // 未bind
+  }
+
+  struct proc *p = myproc();
+  acquire(&pq->lock);
+  while (pq->n == 0) {
+    if (p->killed) {
+      release(&pq->lock);
+      return -1;
+    }
+    sleep(pq, &pq->lock); // ip_rx() 会 wakeup(pq)
+  }
+
+  struct udp_pkt *slot = &pq->q[pq->r];
+  int n = slot->len;
+  if (n > maxlen) {
+    n=maxlen;
+  }
+
+  // 源信息与负载 copyout（host 序）
+  int rc = 0;
+  if (copyout(p->pagetable, u_src, (char*)&slot->sip, sizeof(uint32)) < 0 ||
+      copyout(p->pagetable, u_sport, (char*)&slot->sport, sizeof(uint16)) < 0) {
+    rc = -1;
+  }
+
+  char *payload = slot->buf + sizeof(struct eth)
+                + sizeof(struct ip) + sizeof(struct udp);
+  if (n > 0 && rc == 0 && copyout(p->pagetable, u_buf, payload, n) < 0) {
+    rc = -1;
+  }
+
+  // 出队并释放内核缓冲
+  kfree(slot->buf);
+  slot->buf = 0;
+  slot->len = 0;
+  pq->r = (pq->r + 1) % UDP_Q_LIMIT;
+  --pq->n;
+
+  release(&pq->lock);
+  return rc < 0 ? -1 : n;
+}                              // 5 完成sys_recv函数
+...
+void
+ip_rx(char *buf, int len)
+{
+  // don't delete this printf; make grade depends on it.
+  static int seen_ip = 0;
+  if(seen_ip == 0)
+    printf("ip_rx: received an IP packet\n");
+  seen_ip = 1;
+
+  // 基本越界检查
+  if (len < sizeof(struct eth) + sizeof(struct ip) + sizeof(struct udp)) {
+    kfree(buf);
+    return;
+  }
+  // 保险
+  if (ntohs(((struct eth *)buf)->type) != ETHTYPE_IP) {
+    kfree(buf);
+    return;
+  }
+  // 只处理UDP
+  struct ip *iph = (struct ip *)(buf + sizeof(struct eth));
+  if (iph->ip_p != IPPROTO_UDP) {
+    kfree(buf);
+    return;
+  }
+
+  // 本实验无IP选项，header固定20字节
+  struct udp *uh = (struct udp *)((char *)iph + sizeof(struct ip));
+  int ulen = ntohs(uh->ulen); // 含UDP头
+  if (ulen < (int)sizeof(struct udp)) {
+    kfree(buf);
+    return;
+  }
+
+  int hdrs = sizeof(struct eth) + sizeof(struct ip) + sizeof(struct udp);
+  int payload_len = ulen - (int)sizeof(struct udp);
+  if (len < hdrs + payload_len) { // 越界丢弃
+    kfree(buf);
+    return;
+  }
+
+  uint16 dport = ntohs(uh->dport);
+  uint16 sport = ntohs(uh->sport);
+  uint32 sip   = ntohl(iph->ip_src);
+
+  // 找到端口队列
+  acquire(&upqmap_lock);
+  struct udp_portq *pq = find_portq(dport);
+  release(&upqmap_lock);
+  if (!pq) { // 未绑定直接丢
+    kfree(buf);
+    return;
+  }
+
+  // 入队（满则丢），并唤醒等待的recv()
+  acquire(&pq->lock);
+  if(pq->n >= UDP_Q_LIMIT){
+    release(&pq->lock);
+    kfree(buf);
+    return;
+  }
+  struct udp_pkt *slot = &pq->q[pq->w];
+  slot->sip = sip;
+  slot->sport = sport;
+  slot->len = payload_len;
+  slot->buf = buf;
+  pq->w = (pq->w + 1) % UDP_Q_LIMIT;
+  ++pq->n;
+  wakeup(pq);
+  release(&pq->lock);
+}                              // 6 完成ip_rx函数
+...
+```
+
+### 测试
+
+![net测试结果](./img/net.png)
+
