@@ -1925,7 +1925,7 @@ iscowpage(pagetable_t pagetable, uint64 va)
 
 #### 题目
 
-你的任务是完成`kernel/e1000.c`文件中的`e1000_transmit()`和`e1000_recv()`函数，使驱动程序能够发送和接收数据包。当`make grade`提示你的解决方案通过了“txone”和“rxone”测试时， 这部分就完成了。  
+你的任务是完成`kernel/e1000.c`文件中的`e1000_transmit()`和`e1000_recv()`函数，使驱动程序能够发送和接收数据包。当`make grade`提示你的解决方案通过了`txone`和`rxone`测试时， 这部分就完成了。  
 
 #### 代码
 
@@ -2011,7 +2011,7 @@ e1000_recv(void)
 
 #### 题目
 
-你的任务是在kernel/net.c 文件中实现 ip_rx()、 sys_recv()和 sys_bind() 函数。当make grade提示你的解决方案通过所有测试时，你就完成了。  
+你的任务是在`kernel/net.c`文件中实现`ip_rx()`、`sys_recv()`和`sys_bind()`函数。当`make grade`提示你的解决方案通过所有测试时，你就完成了。  
 
 #### 代码
 
@@ -2271,4 +2271,252 @@ ip_rx(char *buf, int len)
 ### 测试
 
 ![net测试结果](./img/net.png)
+
+## Lab: locks（git checkout lock）
+
+### Memory allocator（难度：中等）
+
+> [!CAUTION]
+> 本实验涉及多核测试。测试时应关闭与测试无关的进程，否则可能代码正确但无法通过测试。
+
+#### 题目
+
+您的任务是实现每个 CPU 的空闲列表，并在 CPU 的空闲列表为空时进行内存窃取。您必须为所有锁指定以“kmem”开头的名称。也就是说，您应该 为每个锁调用`initlock`函数 ，并传递一个以“kmem”开头的名称。运行`kalloctest`来查看您的实现是否减少了锁争用。要检查它是否仍然可以分配所有内存，请运行`usertests sbrkmuch`。`kmem`锁的总体争用大大减少，尽管具体数字会有所不同。确保`usertests -q`中的所有测试都通过。`make grade`应该显示`kalloctests`通过。  
+
+#### 步骤
+
+- `kernel/kalloc.c`中修改如下四处：
+```c
+...
+struct kmem {
+  struct spinlock lock;
+  struct run *freelist;
+} kmem[NCPU];                  // 1 修改结构体命名 + 改为数组
+
+void
+kinit(void)
+{
+  for (int i = 0; i < NCPU; ++i) {
+    initlock(&kmem[i].lock, "kmem");
+  }
+  freerange(end, (void*)PHYSTOP);
+}                              // 2 修改kinit
+...
+void
+kfree(void *pa)
+{
+  struct run *r;
+
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("kfree");
+
+  // Fill with junk to catch dangling refs.
+  memset(pa, 1, PGSIZE);
+
+  r = (struct run*)pa;
+  push_off();
+  struct kmem *pkm = kmem + cpuid();
+  pop_off();
+
+  acquire(&pkm->lock);
+  r->next = pkm->freelist;
+  pkm->freelist = r;
+  release(&pkm->lock);
+}                              // 3 修改kfree
+...
+void *
+kalloc(void)
+{
+  struct run *r;
+
+  push_off();
+  int cpu = cpuid();
+  pop_off();
+  struct kmem *pkm = kmem + cpu;
+  acquire(&pkm->lock);
+  r = pkm->freelist;
+  if (r) {
+    pkm->freelist = r->next;
+    release(&pkm->lock);
+  } else {
+    release(&pkm->lock);
+    for (int i = 0; i < NCPU; ++i) {
+      if (i == cpu) {
+        continue;
+      }
+      pkm = kmem + i;
+      acquire(&pkm->lock);
+      r = pkm->freelist;
+      if (!r) {
+        release(&pkm->lock);
+        continue;
+      }
+      pkm->freelist = r->next;
+      release(&pkm->lock);
+      break;
+    }
+  }
+
+  if(r)
+    memset((char*)r, 5, PGSIZE); // fill with junk
+  return (void*)r;
+}                              // 4 修改kalloc
+```
+
+### Buffer cache（难度：困难）
+
+#### 题目
+
+修改块缓存，使运行`bcachetest`时，bcache中所有锁的获取循环迭代次数接近于0。理想情况下，块缓存中涉及的所有锁的计数总和应为0，但如果总和小于500也没问题。修改`bget`和`brelse`，使`bcache`中不同块的并发查找和释放不太可能发生锁冲突（例如，不必全部等待`bcache.lock`）。必须保持不变，即每个块最多缓存一个副本。不得增加缓冲区数量；必须正好有 NBUF（30个）。修改后的缓存不需要使用LRU替换，但它必须能够在缓存中未命中时使用任何`refcnt`为0的NBUF `struct buf`。确保`usertests -q`仍然通过。 完成后，`make grade`应该通过所有测试。  
+
+#### 步骤
+
+- `kernel/buf.h`中添加两个成员：
+```c
+struct buf {
+  ...
+  uint timestamp;
+  int hash;
+};
+```
+
+- `kernel/bio.c`修改如下七处：
+```c
+...
+#define BUCKETCNT 13           // 1 添加宏定义
+...
+struct bucket {
+  struct spinlock lock;
+  struct buf head;
+} hashtable[BUCKETCNT];        // 2 添加哈希桶
+...
+void
+binit(void)
+{
+  int i;
+
+  initlock(&bcache.lock, "bcache");
+
+  for (i = 0; i < BUCKETCNT; ++i) {
+    initlock(&hashtable[i].lock, "bcache_hash");
+    hashtable[i].head.prev = &hashtable[i].head;
+    hashtable[i].head.next = &hashtable[i].head;
+  }
+  i = 0;
+  for (struct buf *b = bcache.buf, *end = b + NBUF;
+       b < end; ++b, i = (i + 1) % BUCKETCNT) {
+    b->next = hashtable[i].head.next;
+    b->prev = &hashtable[i].head;
+    initsleeplock(&b->lock, "buffer");
+    hashtable[i].head.next->prev = b;
+    hashtable[i].head.next = b;
+
+    b->timestamp = 0;
+    b->hash = i;
+  }
+}                              // 3 修改binit
+...
+static struct buf*
+bget(uint dev, uint blockno)
+{
+  struct buf *b;
+  struct buf *lru = 0;
+  uint hash = blockno % BUCKETCNT;
+  struct bucket *pbh = hashtable + hash;
+  uint min_timestamp = ticks + 114514;
+
+  acquire(&pbh->lock);
+
+  for (b = pbh->head.next; b != &pbh->head; b = b->next) {
+    if (b->dev == dev && b->blockno == blockno) {
+      ++b->refcnt;
+      release(&pbh->lock);
+      acquiresleep(&b->lock);
+      return b;
+    }
+  }
+
+  for (int i = (hash + 1) % BUCKETCNT; i != hash; i = (i + 1) % BUCKETCNT) {
+    struct bucket *pbi = hashtable + i;
+    acquire(&pbi->lock);
+
+    for (b = pbi->head.next; b != &pbi->head; b = b->next) {
+      if (b->refcnt == 0 && b->timestamp < min_timestamp) {
+        lru = b;
+        min_timestamp = b->timestamp;
+      }
+    }
+
+    if (!lru) {
+      release(&pbi->lock);
+      continue;
+    }
+
+    b = lru;
+    b->next->prev = b->prev;
+    b->prev->next = b->next;
+    release(&pbi->lock);
+
+    b->dev = dev;
+    b->blockno = blockno;
+    b->valid = 0;
+    b->refcnt = 1;
+    b->hash = hash;
+
+    b->next = pbh->head.next;
+    b->prev = &pbh->head;
+
+    acquiresleep(&b->lock);
+
+    pbh->head.next->prev = b;
+    pbh->head.next = b;
+    release(&pbh->lock);
+
+    return b;
+  }
+
+  release(&pbh->lock);
+  panic("bget: no buffers");
+}                              // 4 修改bget
+...
+void
+brelse(struct buf *b)
+{
+  if(!holdingsleep(&b->lock))
+    panic("brelse");
+
+  releasesleep(&b->lock);
+
+  struct bucket *pb = hashtable + b->hash;
+  acquire(&pb->lock);
+  b->refcnt--;
+  if (b->refcnt == 0) {
+    // no one is waiting for it.
+    b->timestamp = ticks;
+  }
+  release(&pb->lock);
+}                              // 5 修改brelse
+
+void
+bpin(struct buf *b) {
+  struct bucket *pb = hashtable + b->hash;
+  acquire(&pb->lock);
+  ++b->refcnt;
+  release(&pb->lock);
+}                              // 6 修改bpin
+
+void
+bunpin(struct buf *b) {
+  struct bucket *pb = hashtable + b->hash;
+  acquire(&pb->lock);
+  --b->refcnt;
+  release(&pb->lock);
+}                              // 7 修改bunpin
+```
+
+### 测试
+
+![lock测试结果](./img/lock.png)
+
+## Lab: file system（git checkout fs）
 
