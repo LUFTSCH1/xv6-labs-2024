@@ -101,8 +101,40 @@ e1000_transmit(char *buf, int len)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after send completes.
   //
+  // the mbuf contains an ethernet frame; program it into
+  // the TX descriptor ring so that the e1000 sends it. Stash
+  // a pointer so that it can be freed after sending.
+  //
+  acquire(&e1000_lock);
 
-  
+  uint32 idx = regs[E1000_TDT];
+  struct tx_desc *d = &tx_ring[idx];
+
+  // 若该槽尚未完成上一次发送（DD未置位），队列满
+  if ((d->status & E1000_TXD_STAT_DD) == 0) {
+    release(&e1000_lock);
+    return -1;
+  }
+
+  // 上一轮在这个槽位挂过的缓冲区已发送完成，释放之
+  if (tx_bufs[idx]) {
+    kfree(tx_bufs[idx]);
+    tx_bufs[idx] = 0;
+  }
+
+  // 填充本次要发送的以太帧
+  d->addr   = (uint64)buf;
+  d->length = len;
+  d->cmd    = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS; // 单包结束 + 回写状态
+  d->status = 0; // 交给硬件，等待其置DD
+
+  // 记录缓冲区指针，等硬件置DD后在下次复用该槽位时释放
+  tx_bufs[idx] = buf;
+
+  // 推进环指针
+  regs[E1000_TDT] = (idx + 1) % TX_RING_SIZE;
+
+  release(&e1000_lock);
   return 0;
 }
 
@@ -115,7 +147,39 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver a buf for each packet (using net_rx()).
   //
+  while (1) {
+    acquire(&e1000_lock);
 
+    // 硬件写回的下一包位于 (RDT + 1) % N
+    uint32 idx = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+    struct rx_desc *d = &rx_ring[idx];
+
+    // 没有新包
+    if ((d->status & E1000_RXD_STAT_DD) == 0) {
+      release(&e1000_lock);
+      break;
+    }
+
+    // 取出这包对应的缓冲区与长度
+    char *buf = rx_bufs[idx];
+    int len = d->length;
+
+    // 为该槽位补一个新的缓冲区，让硬件继续写入
+    char *nbuf = (char *)kalloc();
+    if (!nbuf)
+      panic("e1000 rx kalloc");
+    rx_bufs[idx] = nbuf;
+    d->addr = (uint64)nbuf;
+
+    // 清状态并把该槽位交还硬件
+    d->status = 0;
+    regs[E1000_RDT] = idx;
+
+    release(&e1000_lock);
+
+    // 在锁外把收到的包递交给上层；上层处理完会负责 kfree(buf)
+    net_rx(buf, len);
+  }
 }
 
 void
