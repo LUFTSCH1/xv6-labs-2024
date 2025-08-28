@@ -2274,10 +2274,10 @@ ip_rx(char *buf, int len)
 
 ## Lab: locks（git checkout lock）
 
-### Memory allocator（难度：中等）
-
 > [!CAUTION]
-> 本实验涉及多核测试。测试时应关闭与测试无关的进程，否则可能代码正确但无法通过测试。
+> 本实验涉及多核测试。测试时应关闭与测试无关的进程，否则可能代码实现正确但无法通过测试。
+
+### Memory allocator（难度：中等）
 
 #### 题目
 
@@ -2519,4 +2519,263 @@ bunpin(struct buf *b) {
 ![lock测试结果](./img/lock.png)
 
 ## Lab: file system（git checkout fs）
+
+### Large files（难度：中等）
+
+#### 题目
+
+修改`bmap()`，使其除了直接块和单间接块之外，还实现双向间接块。为了给新的双向间接块腾出空间，你只需要有11个直接块，而不是12个；你不能更改磁盘上`inode`的大小。`ip->addrs[]`的前11个元素应该是直接块；第12个元素应该是单间接块（与当前块相同）；第13个元素应该是新的双向间接块。当`bigfile`写入65803个块并且`usertests -q`成功运行时，你完成了本练习。  
+
+#### 步骤
+
+- `fs.h`中修改如下三处：
+```c
+...
+#define NDIRECT 11 // 改为 11
+#define NINDIRECT (BSIZE / sizeof(uint))
+#define MAXFILE (NDIRECT + NINDIRECT + NINDIRECT * NINDIRECT) // 修改大小
+
+// On-disk inode structure
+struct dinode {
+  ...
+  uint addrs[NDIRECT+2];   // Data block addresses 元素数改为 NDIRECT+2
+};
+...
+```
+
+- `file.h`中修改如下一处：
+```c
+...
+// in-memory copy of an inode
+struct inode {
+  ...
+  uint addrs[NDIRECT+2]; // 元素数改为 NDIRECT+2
+};
+...
+```
+
+- `fs.c`中修改`bmap`和`itrunc`函数：
+```c
+...
+static uint
+bmap(struct inode *ip, uint bn)
+{
+  ...
+  bn -= NINDIRECT;
+  if (bn < NINDIRECT * NINDIRECT) {
+    // 分配索引数据块
+    if ((addr = ip->addrs[NDIRECT + 1]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr == 0) {
+        return 0;
+      }
+      ip->addrs[NDIRECT + 1] = addr;
+    }
+    // 第一层索引
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if ((addr = a[bn / NINDIRECT]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr) {
+        a[bn / NINDIRECT] = addr;
+        log_write(bp);
+      }
+    }
+    brelse(bp);
+    // 第二层索引
+    bn %= NINDIRECT;
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if ((addr = a[bn]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr) {
+        a[bn] = addr;
+        log_write(bp);
+      }
+    }
+    brelse(bp);
+    return addr;
+  }                            // 在panic前添加如上多层逻辑
+
+  panic("bmap: out of range");
+}
+...
+void
+itrunc(struct inode *ip)
+{
+  int i, j, k;                 // 加上k
+  struct buf *bp, *bbp;        // 加上bbp
+  uint *a, *aa;                // 加上aa
+  ...
+  if (ip->addrs[NDIRECT + 1]) {
+    bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+    a = (uint *)bp->data;
+    for (j = 0; j < NINDIRECT; ++j) {
+      if (a[j]) {
+        bbp = bread(ip->dev, a[j]);
+        aa = (uint *)bbp->data;
+        for (k = 0; k < NINDIRECT; ++k) {
+          if (aa[k]) {
+            bfree(ip->dev, aa[k]);
+          }
+        }
+        brelse(bbp);
+        bfree(ip->dev, a[j]);
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT + 1]);
+    ip->addrs[NDIRECT + 1] = 0;
+  }                            // 在ip->size = 0;前加上多层逻辑
+
+  ip->size = 0;
+  iupdate(ip);
+}
+...
+```
+
+### Symbolic links（难度：中等）
+
+#### 题目
+
+您将实现`symlink(char *target, char *path)`系统调用，该调用会在`path`处创建一个新的符号链接，指向`target`指定的文件。更多信息，请参阅手册页`symlink`。要进行测试，请将`symlinktest`添加到`Makefile`并运行它。当测试生成以下输出（包括用户测试成功）时，您的解决方案即完成。  
+
+#### 步骤
+
+- `user/usys.pl`中添加`symlink`存根：
+```perl
+...
+entry("symlink");
+```
+
+- `user/user.h`中添加`symlink`函数声明：
+```c
+...
+// system calls
+...
+int symlink(char *, char *);
+...
+```
+
+- `kernel/syscall.h`中添加`symlink`系统调用号：
+```c
+// System call numbers
+...
+#define SYS_symlink 22
+```
+
+- `kernel/syscall.c`中添加`sys_symlink`指针：
+```c
+...
+// Prototypes for the functions that handle system calls.
+...
+extern uint64 sys_symlink(void); // 添加外部函数声明
+...
+static uint64 (*syscalls[])(void) = {
+...
+[SYS_symlink] sys_symlink        // 加入系统调用指针数组
+};
+...
+```
+
+- `kernel/stat.h`中添加一个新文件类型：
+```c
+#define T_DIR     1   // Directory
+#define T_FILE    2   // File
+#define T_DEVICE  3   // Device
+#define T_SYMLINK 4   // Symlink
+...
+```
+
+- `kernel/fcntl.h`中添加一个新的打开模式（标志位）：
+```c
+#define O_RDONLY   0x000
+#define O_WRONLY   0x001
+#define O_RDWR     0x002
+#define O_NOFOLLOW 0x004 // 只有一个二进制位为1的数，不与其它重复
+#define O_CREATE   0x200
+#define O_TRUNC    0x400
+```
+
+- `kernel/sysfile.c`中修改`sys_open`并添加`sys_symlink`函数定义：
+```c
+...
+uint64
+sys_open(void)
+{
+  ...
+  begin_op();
+
+  if(omode & O_CREATE){
+    ip = create(path, T_FILE, 0, 0);
+    if(ip == 0){
+      end_op();
+      return -1;
+    }
+  } else {
+    if((ip = namei(path)) == 0){
+      end_op();
+      return -1;
+    }
+    ilock(ip);
+    int depth = 0;
+    while (ip->type == T_SYMLINK && (omode & O_NOFOLLOW) == 0) {
+      if (++depth > 10) {
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      memset(path, 0, MAXPATH);
+      if (readi(ip, 0, (uint64)path, 0, MAXPATH) < 0) {
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      iunlockput(ip);
+      if ((ip = namei(path)) == 0) {
+        end_op();
+        return -1;
+      }
+      ilock(ip);
+    }                     // int depth = 0;和while循环为新增部分
+  ...
+}
+...
+uint64
+sys_symlink(void)
+{
+  char target[MAXPATH], path[MAXPATH];
+  argstr(0, target, MAXPATH);
+  argstr(1, path, MAXPATH);
+
+  begin_op();
+  struct inode *ip = create(path, T_SYMLINK, 0, 0);
+  if (ip == 0) {
+    end_op();
+    return -1;
+  }
+  if (writei(ip, 0, (uint64)target, 0, strlen(target)) < 0) {
+    end_op();
+    return -1;
+  }
+  iunlockput(ip);
+  end_op();
+
+  return 0;
+}                         // 添加sys_symlink函数定义
+```
+
+- `Makefile`中添加`symlinktest`：
+```makefile
+...
+UPROGS=\
+	...
+	$U/_symlinktest\
+...
+```
+
+### 测试
+
+![fs测试结果](./img/fs.png)
+
 
