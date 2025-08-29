@@ -2954,7 +2954,6 @@ sys_mmap(void)
   if (!ptvma) {
     return -1;
   }
-
   argaddr(0, &ptvma->addr);
   argsize_t(1, &ptvma->len);
   argint(2, &ptvma->prot);
@@ -2984,10 +2983,10 @@ sys_munmap(void)
 {
   uint64 addr;
   size_t len;
-  struct proc *p = myproc();
-  struct vma *ptvma;
   argaddr(0, &addr);
   argsize_t(1, &len);
+  struct proc *p = myproc();
+  struct vma *ptvma;
   int i = 0;
   for( ; i < NVMA; ++i) {
     ptvma = p->pvma + i;
@@ -2996,16 +2995,15 @@ sys_munmap(void)
       break;
     }
   }
-  return i < 16;
+  return i < NVMA;
 }
 
 static int
-munmapfilewrite(struct file *f, uint64 addr, uint off, int n)
+munmapfilewrite(struct file *f, uint64 addr, off_t off, int n)
 {
-  int r;
   int max = ((MAXOPBLOCKS - 1 - 1 - 2) / 2) * BSIZE;
   int i = 0;
-  while (i < n) {
+  for (int r = 0; i < n; i += r) {
     int n1 = n - i;
     if (n1 > max) {
       n1 = max;
@@ -3022,7 +3020,6 @@ munmapfilewrite(struct file *f, uint64 addr, uint off, int n)
     if (r != n1) { // writei错误
       break;
     }
-    i += r;
   }
   return (i == n) ? n : -1;
 }
@@ -3037,7 +3034,6 @@ munmap(int i, struct proc *p, uint64 addr, size_t len)
   uint64 va = addr;
   int npages = PGROUNDUP(len) / PGSIZE;
   int can_write = (ptvma->flags & MAP_SHARED) && (ptvma->prot & PROT_WRITE) && (vfile->writable);
-
   for (int j = 0; j < npages; ++j) {
     if (walkaddr(p->pagetable, va) != 0) {
       if (can_write) {
@@ -3079,9 +3075,6 @@ mmapfaulthandler(struct proc *p, uint64 scause)
   for ( ; i < NVMA; ++i) {
     struct vma trapvma = p->pvma[i];
     if (va >= trapvma.addr && va < trapvma.addr + trapvma.len) {
-      char *mem = (char *)kalloc();
-      memset(mem, 0, PGSIZE);
-      struct inode *ip = trapvma.vfile->ip;
       int perm = PTE_U | ((trapvma.prot & PROT_READ) ? PTE_R : 0);
       if (trapvma.prot & PROT_WRITE) {
         perm |= PTE_W;
@@ -3089,14 +3082,22 @@ mmapfaulthandler(struct proc *p, uint64 scause)
         return 0; // failed
       }
       uint off = va - trapvma.addr + trapvma.offset;
+      char *mem = (char *)kalloc();
+      if (!mem) {
+        panic("mmapfaulthandler: kalloc");
+      }
+      memset(mem, 0, PGSIZE);
+      struct inode *ip = trapvma.vfile->ip;
       ilock(ip);
       readi(ip, 0, (uint64)mem, off, PGSIZE);
       iunlock(ip);
-      mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm);
+      if (mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm) != 0) {
+        panic("mmapfaulthandler: mappages");
+      }
       break;
     }
   }
-  return i != 16;
+  return i < NVMA;
 }
 ```
 
