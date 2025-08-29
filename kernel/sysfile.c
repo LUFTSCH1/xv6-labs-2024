@@ -571,10 +571,9 @@ sys_munmap(void)
 static int
 munmapfilewrite(struct file *f, uint64 addr, off_t off, int n)
 {
-  int r;
   int max = ((MAXOPBLOCKS - 1 - 1 - 2) / 2) * BSIZE;
   int i = 0;
-  while (i < n) {
+  for (int r = 0; i < n; i += r) {
     int n1 = n - i;
     if (n1 > max) {
       n1 = max;
@@ -591,7 +590,6 @@ munmapfilewrite(struct file *f, uint64 addr, off_t off, int n)
     if (r != n1) { // writei错误
       break;
     }
-    i += r;
   }
   return (i == n) ? n : -1;
 }
