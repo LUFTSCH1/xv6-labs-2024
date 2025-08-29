@@ -12,7 +12,7 @@
 
 ### 安装`WSL发行版`
 
-打开`Microsoft Store`应用，搜索`Debian`并安装即可，本次实验所使用的版本为`Debian 12.9`，安装完成可以直接点击“打开”、在“开始”菜单旁的“搜索”功能输入`Debian`或是直接在`CMD`/`Power Shell`中输入`bash`启动（若安装了多个`WSL发行版`，则应注意该方式启动的是默认发行版）  
+打开`Microsoft Store`应用，搜索`Debian`并安装即可，本次实验所使用的版本为`Debian 12.9`，安装完成可以直接点击“打开”、在“开始”菜单旁的“搜索”功能输入`Debian`或是直接在`CMD`/`Power Shell`中输入`bash`启动（若安装了多个`WSL发行版`，则应注意该方式启动的是默认发行版）。  
 
 ### 配置`WSL发行版`
 
@@ -23,21 +23,21 @@
 sudo apt-get update && sudo apt-get upgrade
 sudo apt-get install git build-essential gdb-multiarch qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu
 ```
-简单解释一下安装内容：  
-  * `git`：版本控制工具  
-  * `build-essential`：开发工具组合，主要使用其中的`make`（自动化构建工具）  
-  * `gdb-multiarch`：GNU调试器  
-  * `qemu-system-misc`：QEMU全系统模拟器  
-  * `gcc-riscv64-linux-gnu`：`RISC-V 64`交叉编译器  
-  * `binutils-riscv64-linux-gnu`：`RISC-V 64`二进制工具  
+简单解释一下安装内容：
+  * `git`：版本控制工具
+  * `build-essential`：开发工具组合，主要使用其中的`make`（自动化构建工具）
+  * `gdb-multiarch`：GNU调试器
+  * `qemu-system-misc`：QEMU全系统模拟器
+  * `gcc-riscv64-linux-gnu`：`RISC-V 64`交叉编译器
+  * `binutils-riscv64-linux-gnu`：`RISC-V 64`二进制工具
 
 **使用如下命令检验安装是否成功**：  
 
-所有发行版下均一致的命令（成功则显示版本号）：  
+所有发行版下均一致的命令（成功则显示版本号）：
 ```bash
 qemu-system-riscv64 --version
 ```
-接着以下三条有一条执行成功即可：  
+接着以下三条有一条执行成功即可：
 ```bash
 riscv64-linux-gnu-gcc --version
 riscv64-unknown-elf-gcc --version
@@ -50,7 +50,7 @@ riscv64-unknown-linux-gnu-gcc --version
 
 ### 拉取实验仓库
 
-按照官方给出的仓库地址，执行：  
+按照官方给出的仓库地址，执行：
 ```bash
 git clone git://g.csail.mit.edu/xv6-labs-2024
 ```
@@ -59,7 +59,7 @@ git clone git://g.csail.mit.edu/xv6-labs-2024
 
 ### 继续配置项目
 
-如果要使用`git`进行版本控制，建议在`.gitignore`文件中加上如下配置：  
+如果要使用`git`进行版本控制，建议在`.gitignore`文件中加上如下配置：
 ```.gitignore
 .vscode/
 .cache/
@@ -141,7 +141,7 @@ main(int argc, char *argv[])
 
 #### 本题额外说明
 
-接着在项目根目录`Makefile`文件第180行的`UPROGS`项下追加：  
+接着在项目根目录`Makefile`文件第180行的`UPROGS`项下追加：
 ```makefile
 ...
 UPROGS=\
@@ -151,11 +151,11 @@ UPROGS=\
 ```
 保存后使用前面提到的`make qemu`命令构建即可。`util`中每个实验都要做这步操作。  
 
-除了在`xv6`内核的命令行界面手动输入`sleep 10`之类的命令进行测试之外，还需要通过测试脚本，测试的方法是在项目根目录下输入命令：  
+除了在`xv6`内核的命令行界面手动输入`sleep 10`之类的命令进行测试之外，还可以使用测试脚本，用法是在项目根目录下输入命令：
 ```bash
 ./grade-lab-util sleep
 ```
-如无执行权限，则`chmod`追加执行权限后再尝试：  
+如无执行权限，则`chmod`追加执行权限后再尝试：
 ```bash
 chmod +x ./grade-lab-util
 ```  
@@ -168,11 +168,11 @@ chmod +x ./grade-lab-util
 
 #### 简要分析
 
-先来了解`xv6`的`fork`、`pipe`、`wait`机制： 
+先来了解`xv6`的`fork`、`pipe`、`wait`机制：
   * `fork`：从含`fork()`的语句处对进程进行“分身”，将当前进程作为父进程，完整拷贝一份父进程的内存数据生成子进程，这两个进程会被挂起等待调度。父进程将从刚刚提到的含`fork()`的那句继续执行，其`fork()`函数返回子进程的PID（一个正数）；子进程也将从同一句（仅代码角度的同一句）开始执行，其`fork()`调用返回0，表示它是子进程。
-  * `文件描述符`：`文件描述符`指向一个`打开的文件对象`，但其并非一对一的关系，而是一对多的关系。就像房卡与房间，可能有多名客人入住酒店的一间多床房间，每名客人都有一张可以开启房门的房卡，只有当所有客人都归还房卡（客人视角的“退房”操作）时，才可以让工作人员前往“释放”这个房间。对于文件描述符和打开的文件对象而言，这就是在底层增加了一个`引用计数`，其数值就是使用这个文件的进程数。`fork()`复制进程时会增加这个引用计数。可以手动`close(文件描述符)`来减少引用计数，也可以让操作系统自动在进程退出后减少对应的引用计数。打开的文件对象将在引用计数归零时释放。  
-  * `pipe`：管道是一种虚拟文件，打开管道`int pipe(int p[])`将生成一对读、写文件描述符分别存入`&p[0]`、`&p[1]`处。在打开的读、写文件对象的引用计数均归零后管道会被释放。  
-  * `wait`：子进程执行完后不会完全消失，而是进入`僵尸进程`状态，需要父进程调用`int wait(int *status)`进行回收，这是`wait`的根本作用。另外，由于父子进程执行顺序完全取决于操作系统的调度，尽管调度算法是确定的，但实际情况相当复杂，故可以认为执行顺序不确定。调整父进程中`wait`调用的位置可以保证其之后的语句一定在子进程退出后执行，在必要时可以通过`status`确定子进程执行是否成功。  
+  * `文件描述符`：`文件描述符`指向一个`打开的文件对象`，但其并非一对一的关系，而是一对多的关系。就像房卡与房间，可能有多名客人入住酒店的一间多床房间，每名客人都有一张可以开启房门的房卡，只有当所有客人都归还房卡（客人视角的“退房”操作）时，才可以让工作人员前往“释放”这个房间。对于文件描述符和打开的文件对象而言，这就是在底层增加了一个`引用计数`，其数值就是使用这个文件的进程数。`fork()`复制进程时会增加这个引用计数。可以手动`close(文件描述符)`来减少引用计数，也可以让操作系统自动在进程退出后减少对应的引用计数。打开的文件对象将在引用计数归零时释放。
+  * `pipe`：管道是一种虚拟文件，打开管道`int pipe(int p[])`将生成一对读、写文件描述符分别存入`&p[0]`、`&p[1]`处。在打开的读、写文件对象的引用计数均归零后管道会被释放。
+  * `wait`：子进程执行完后不会完全消失，而是进入`僵尸进程`状态，需要父进程调用`int wait(int *status)`进行回收，这是`wait`的根本作用。另外，由于父子进程执行顺序完全取决于操作系统的调度，尽管调度算法是确定的，但实际情况相当复杂，故可以认为执行顺序不确定。调整父进程中`wait`调用的位置可以保证其之后的语句一定在子进程退出后执行，在必要时可以通过`status`确定子进程执行是否成功。
 
 #### 代码
 
@@ -441,7 +441,7 @@ main(int argc, char *argv[])
 
 #### 题目
 
-为 xv6 编写一个 UNIX xargs 程序的简单版本：它的参数描述一个要运行的命令，它从标准输入读取一行，然后逐行运行该命令，并将该行附加到命令的参数中。你的解决方案应位于文件`user/xargs.c`中。  
+为`xv6`编写一个`UNIX xargs`程序的简单版本：它的参数描述一个要运行的命令，它从标准输入读取一行，然后逐行运行该命令，并将该行附加到命令的参数中。你的解决方案应位于文件`user/xargs.c`中。  
 
 #### 简要分析
 
@@ -570,7 +570,7 @@ main(int argc, char *argv[])
 ```
 ### 测试
 
-在根目录上创建一个`time.txt`，内容为一个整型，记录实验用时（小时数）。然后测试目录结构和所有题目：  
+在根目录上创建一个`time.txt`，内容为一个整型，记录实验用时（小时数）。然后测试目录结构和所有题目：
 
 ```bash
 make grade
@@ -633,11 +633,11 @@ struct proc {
 
 #### Looking at the backtrace output, which function called syscall?
 
-  - usertrap  
+  - usertrap
 
 #### What is the value of p->trapframe->a7 and what does that value represent? (Hint: look user/initcode.S, the first user program xv6 starts.)
 
-  - `0x2`，为一个系统调用号，代表`SYS_exit`  
+  - `0x2`，为一个系统调用号，代表`SYS_exit`
 
 #### What was the previous mode that the CPU was in?
 
@@ -650,7 +650,7 @@ struct proc {
 num = *(int *)0;
   80001c1e:	00002683          	lw	a3,0(zero) # 0 <_entry-0x80000000>
 ```
-  - 寄存器: a3  
+  - 寄存器: a3
 
 #### Why does the kernel crash? Hint: look at figure 3-3 in the text; is address 0 mapped in the kernel address space? Is that confirmed by the value in scause above? (See description of scause in RISC-V privileged instructions)
 
@@ -659,17 +659,17 @@ num = *(int *)0;
 
 #### What is the name of the process that was running when the kernel paniced? What is its process id (pid)?
 
-  - 进程名：initcode，pid：1  
+  - 进程名：initcode，pid：1
 
 ### System call tracing（`user/trace.c` 难度：中等）
 
 #### 题目
 
-在本作业中，你将添加一个系统调用跟踪功能，该功能可能有助于你调试后续的实验。你将创建一个新的trace系统调用来控制跟踪。它应该接受一个参数，即一个整数“掩码”，其位指定要跟踪的系统调用。例如，要跟踪`fork`系统调用，程序会调用`trace(1 << SYS_fork)`，其中`SYS_fork`是`kernel/syscall.h`中的系统调用编号。如果系统调用的编号在掩码中设置，则你必须修改`xv6`内核，使其在每个系统调用即将返回时打印一行。该行应包含进程 ID、系统调用名称和返回值；你无需打印系统调用参数。trace系统调用应该启用对调用它的进程及其后续分叉的任何子进程的跟踪，但不应影响其他进程。  
+在本作业中，你将添加一个系统调用跟踪功能，该功能可能有助于你调试后续的实验。你将创建一个新的`trace`系统调用来控制跟踪。它应该接受一个参数，即一个整数“掩码”，其位指定要跟踪的系统调用。例如，要跟踪`fork`系统调用，程序会调用`trace(1 << SYS_fork)`，其中`SYS_fork`是`kernel/syscall.h`中的系统调用编号。如果系统调用的编号在掩码中设置，则你必须修改`xv6`内核，使其在每个系统调用即将返回时打印一行。该行应包含进程ID、系统调用名称和返回值；你无需打印系统调用参数。`trace`系统调用应该启用对调用它的进程及其后续分叉的任何子进程的跟踪，但不应影响其他进程。  
 
 #### 步骤
 
-- `Makefile`中添加`trace`
+- `Makefile`中添加`trace`：
 ```makefile
 ...
 UPROGS=\
@@ -678,7 +678,7 @@ UPROGS=\
 ...
 ```
 
-- `user/user.h`中添加函数声明
+- `user/user.h`中添加函数声明：
 ```c
 ...
 // system calls
@@ -687,19 +687,19 @@ int fork(void);
 int trace(int);
 ```
 
-- `user/usys.pl`中添加系统调用存根
+- `user/usys.pl`中添加系统调用存根：
 ```perl
 ...
 entry("trace");
 ```
 
-- `kernel/syscall.h`中添加系统调用号
+- `kernel/syscall.h`中添加系统调用号：
 ```c
 ...
 #define SYS_trace 22
 ```
 
-- `kernel/proc.h`中添加`proc`结构体成员储存掩码
+- `kernel/proc.h`中添加`proc`结构体成员储存掩码：
 ```c
 ...
 struct proc {
@@ -709,7 +709,7 @@ struct proc {
 };
 ```
 
-- `kernel/sysproc.c`末尾定义`sys_trace`函数
+- `kernel/sysproc.c`末尾定义`sys_trace`函数：
 ```c
 ...
 uint64
@@ -722,7 +722,7 @@ sys_trace(void)
 }
 ```
 
-- `kernel/proc.c`中修改`fork`函数定义
+- `kernel/proc.c`中修改`fork`函数定义：
 ```c
 ...
 int
@@ -738,7 +738,7 @@ fork(void)
 ...
 ```
 
-- `kernel/syscall.c`中修改如下标注的四处
+- `kernel/syscall.c`中修改如下标注的四处：
 ```c
 ...
 // Prototypes for the functions that handle system calls.
@@ -798,7 +798,7 @@ syscall(void)
 
 #### 题目
 
-`user/secret.c`在其内存中写入一个 8 字节的密钥，然后退出（这将释放其内存）。您的目标是向`user/attack.c`添加几行代码，以查找上次执行`secret.c`时写入内存的密钥，并将这 8 个密钥字节写入文件描述符 2。如果attacktest打印出`OK: secret is ebb.ebb`，您将获得满分。（注意： attacktest 每次运行的密钥可能不同。）。  
+`user/secret.c`在其内存中写入一个8字节的密钥，然后退出（这将释放其内存）。您的目标是向`user/attack.c`添加几行代码，以查找上次执行`secret.c`时写入内存的密钥，并将这8个密钥字节写入文件描述符2。如果attacktest打印出`OK: secret is ebb.ebb`，您将获得满分。（注意： attacktest 每次运行的密钥可能不同。）。  
 
 #### 简要分析
 
@@ -860,7 +860,7 @@ main(int argc, char *argv[])
 
 #### 题目
 
-对于print_pgtbl输出 中的每个页表项，解释其逻辑上包含的内容以及其权限位。xv6 手册中的图 3.4 可能会有所帮助，但请注意，该图的页面集合可能与此处检查的进程略有不同。需要注意的是，xv6 不会将虚拟页面连续地放置在物理内存中。  
+对于`print_pgtbl`输出中的每个页表项，解释其逻辑上包含的内容以及其权限位。`xv6手册`中的图3.4可能会有所帮助，但请注意，该图的页面集合可能与此处检查的进程略有不同。需要注意的是，`xv6`不会将虚拟页面连续地放置在物理内存中。  
 
 #### 输出
 
@@ -910,7 +910,7 @@ va 0xFFFFF000 pte 0x2000184B pa 0x80006000 perm 0x4B
 
 #### 题目
 
-每个进程创建后，将一个只读页面映射到 USYSCALL（定义在memlayout.h中的虚拟地址）。在该页面的起始处，存储一个struct usyscall（同样定义在memlayout.h中），并将其初始化为当前进程的 PID。在本实验中，用户空间端已提供ugetpid() 函数，它将自动使用 USYSCALL 映射。如果在运行pgtbltest时ugetpid测试用例通过，您将获得本实验此部分的全部学分。  
+每个进程创建后，将一个只读页面映射到`USYSCALL`（定义在`memlayout.h`中的虚拟地址）。在该页面的起始处，存储一个`struct usyscall`（同样定义在`memlayout.h`中），并将其初始化为当前进程的PID。在本实验中，用户空间端已提供`ugetpid()`函数，它将自动使用`USYSCALL`映射。如果在运行`pgtbltest`时`ugetpid`测试用例通过，您将获得本实验此部分的全部分数。  
 
 #### 步骤
 
@@ -998,7 +998,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 
 #### 题目
 
-我们添加了一个系统调用kpgtbl()，它会调用 vm.c中的vmprint()。它接受一个pagetable_t参数，你的任务是按照下面描述的格式打印该页表。当您运行print_kpgtbl()测试时，您的实现应该打印以下输出：
+我们添加了一个系统调用`kpgtbl()`，它会调用`vm.c`中的`vmprint()`。它接受一个`pagetable_t`参数，你的任务是按照下面描述的格式打印该页表。当您运行`print_kpgtbl()`测试时，您的实现应该打印以下输出：
 ```text
 page table 0x0000000087f22000
  ..0x0000000000000000: pte 0x0000000021fc7801 pa 0x0000000087f1e000
@@ -1016,7 +1016,7 @@ page table 0x0000000087f22000
 
 #### 步骤
 
-- `kernel/vm.c`中预留好的`vmprint`函数中实现
+- `kernel/vm.c`中预留好的`vmprint`函数中实现：
 ```c
 ...
 static inline
@@ -1070,11 +1070,11 @@ vmprint(pagetable_t pagetable)
 
 #### 题目
 
-你的任务是修改 xv6 内核以使用超级页面。具体来说，如果用户程序调用 sbrk() 函数，其大小为 2MB 或更大，并且新创建的地址范围包含一个或多个 2MB 对齐且大小至少为 2MB 的区域，则内核应该使用单个超级页面（而不是数百个普通页面）。如果在运行pgtbltest时superpg_test测试用例通过，你将获得本实验此部分的满分。  
+你的任务是修改`xv6内核`以使用超级页面。具体来说，如果用户程序调用`sbrk()`函数，其大小为2MB或更大，并且新创建的地址范围包含一个或多个2MB对齐且大小至少为2MB的区域，则内核应该使用单个超级页面（而不是数百个普通页面）。如果在运行`pgtbltest`时`superpg_test`测试用例通过，你将获得本实验此部分的满分。  
 
 #### 步骤
 
-- `kernel/memlayout.h`中插入宏
+- `kernel/memlayout.h`中插入宏：
 ```c
 ...
 #define KERNBASE 0x80000000L
@@ -1083,7 +1083,7 @@ vmprint(pagetable_t pagetable)
 ...
 ```
 
-- `kernel/defs.h`中添加`super`相关声明
+- `kernel/defs.h`中添加`super`相关声明：
 ```c
 // kalloc.c
 void*           kalloc(void);
@@ -1094,7 +1094,7 @@ void            superfree(void *);
 void            superinit(void);
 ```
 
-- `kernel/main.c`中添加`superinit`调用
+- `kernel/main.c`中添加`superinit`调用：
 ```c
 ...
 void
@@ -1108,7 +1108,7 @@ main()
 }
 ```
 
-- `kernel/kalloc.c`改动如下六处
+- `kernel/kalloc.c`改动如下六处：
 ```c
 ...
 struct {
@@ -1453,11 +1453,11 @@ printf("x=%d y=%d", 3);
 
 #### 题目
 
-对于调试来说，通常情况下，进行回溯会很有用：即在发生错误的位置之上，堆栈上所有函数调用的列表。为了辅助回溯，编译器会生成机器码，并在堆栈上维护一个与当前调用链中每个函数对应的堆栈帧。每个堆栈帧由返回地址和指向调用者堆栈帧的“帧指针”组成。寄存器`s0`包含一个指向当前堆栈帧的指针（它实际上指向堆栈上已保存的返回地址的地址加 8）。您的回溯 应该使用帧指针遍历堆栈，并在每个堆栈帧中打印已保存的返回地址。  
+对于调试来说，通常情况下，进行回溯会很有用：即在发生错误的位置之上，堆栈上所有函数调用的列表。为了辅助回溯，编译器会生成机器码，并在堆栈上维护一个与当前调用链中每个函数对应的堆栈帧。每个堆栈帧由返回地址和指向调用者堆栈帧的“帧指针”组成。寄存器`s0`包含一个指向当前堆栈帧的指针（它实际上指向堆栈上已保存的返回地址的地址加8）。您的回溯 应该使用帧指针遍历堆栈，并在每个堆栈帧中打印已保存的返回地址。  
 
 #### 步骤
 
-- `kernel/defs.h`中添加`backtrace`声明
+- `kernel/defs.h`中添加`backtrace`声明：
 ```c
 ...
 // printf.c
@@ -1468,7 +1468,7 @@ void            backtrace(void);
 ...
 ```
 
-- `kernel/riscv.h`的`#ifndef __ASSEMBLER__`条件编译中找个位置加上
+- `kernel/riscv.h`的`#ifndef __ASSEMBLER__`条件编译中找个位置加上：
 ```c
 static inline uint64
 r_fp()
@@ -1479,7 +1479,7 @@ r_fp()
 }
 ```
 
-- `kernel/printf.c`中添加`backtrace`定义
+- `kernel/printf.c`中添加`backtrace`定义：
 ```c
 void
 backtrace(void)
@@ -1502,7 +1502,7 @@ backtrace(void)
 }
 ```
 
-- `kernel/sysproc.c`的`sys_sleep`开头添加`backtrace`调用
+- `kernel/sysproc.c`的`sys_sleep`开头添加`backtrace`调用：
 ```c
 void
 sys_sleep(void)
@@ -1516,7 +1516,7 @@ sys_sleep(void)
 
 #### 题目
 
-您应该添加一个新的sigalarm(interval, handler)系统调用。如果应用程序调用sigalarm(n, fn)，则 程序每消耗 n 个CPU 时间“刻”，内核就会触发调用应用程序函数fn 。当fn返回时，应用程序应该从中断处继续执行。刻是 xv6 中一个相当随意的时间单位，由硬件定时器生成中断的频率决定。如果应用程序调用sigalarm(0, 0)，内核应该停止生成周期性的 alarm 调用。  
+您应该添加一个新的`sigalarm(interval, handler)`系统调用。如果应用程序调用`sigalarm(n, fn)`，则 程序每消耗n个CPU时间“刻”，内核就会触发调用应用程序函数`fn`。当`fn`返回时，应用程序应该从中断处继续执行。刻是`xv6`中一个相当随意的时间单位，由硬件定时器生成中断的频率决定。如果应用程序调用`sigalarm(0, 0)`，内核应该停止生成周期性的`alarm`调用。  
 
 #### 步骤
 
@@ -1707,7 +1707,7 @@ sigreturn(void)
 
 #### 题目
 
-你的任务是在 xv6 内核中实现写时复制 fork。如果修改后的内核能够成功执行 cowtest 和 usertests -q 程序，则任务完成。  
+你的任务是在`xv6内核`中实现写时复制`fork`。如果修改后的内核能够成功执行`cowtest`和`usertests -q`程序，则任务完成。  
 
 #### 步骤
 
@@ -2281,7 +2281,7 @@ ip_rx(char *buf, int len)
 
 #### 题目
 
-您的任务是实现每个 CPU 的空闲列表，并在 CPU 的空闲列表为空时进行内存窃取。您必须为所有锁指定以“kmem”开头的名称。也就是说，您应该 为每个锁调用`initlock`函数 ，并传递一个以“kmem”开头的名称。运行`kalloctest`来查看您的实现是否减少了锁争用。要检查它是否仍然可以分配所有内存，请运行`usertests sbrkmuch`。`kmem`锁的总体争用大大减少，尽管具体数字会有所不同。确保`usertests -q`中的所有测试都通过。`make grade`应该显示`kalloctests`通过。  
+您的任务是实现每个CPU的空闲列表，并在CPU的空闲列表为空时进行内存窃取。您必须为所有锁指定以“kmem”开头的名称。也就是说，您应该为每个锁调用`initlock`函数 ，并传递一个以“kmem”开头的名称。运行`kalloctest`来查看您的实现是否减少了锁争用。要检查它是否仍然可以分配所有内存，请运行`usertests sbrkmuch`。`kmem`锁的总体争用大大减少，尽管具体数字会有所不同。确保`usertests -q`中的所有测试都通过。`make grade`应该显示`kalloctests`通过。  
 
 #### 步骤
 
@@ -2778,4 +2778,378 @@ UPROGS=\
 
 ![fs测试结果](./img/fs.png)
 
+## Lab: mmap（git checkout mmap）
 
+### Lab: mmap（难度：困难）
+
+#### 题目
+
+您应该实现足够的`mmap`和`munmap`功能，以使`mmaptest`测试程序正常运行。如果`mmaptest`不使用某个`mmap`功能，则无需实现该功能。您还必须确保`usertests -q`能够继续正常工作。  
+
+#### 步骤
+
+- `user/user.h`中添加`mmap`和`munmap`函数声明：
+```c
+...
+// system calls
+...
+void *mmap(void *, size_t, int, int, int, off_t);
+int munmap(void *, size_t);
+...
+```
+
+- `user/usys.pl`中添加系统调用存根：
+```perl
+...
+entry("mmap");
+entry("munmap");
+```
+
+- `kernel/syscall.h`中添加系统调用号：
+```c
+// System call numbers
+...
+#define SYS_mmap   22
+#define SYS_munmap 23
+```
+
+- `kernel/syscall.c`中添加两个工具函数和系统调用外部声明和函数指针：
+```c
+...
+// 这两个函数定义在argraw函数后即可
+void
+argsize_t(int n, size_t *ip)
+{
+  *ip = argraw(n);
+}
+
+void
+argoff_t(int n, off_t *ip)
+{
+  *ip = argraw(n);
+}
+...
+// Prototypes for the functions that handle system calls.
+...
+extern uint64 sys_mmap(void);
+extern uint64 sys_munmap(void);
+...
+static uint64 (*syscalls[])(void) = {
+...
+[SYS_mmap]   sys_mmap,
+[SYS_munmap] sys_munmap
+};
+...
+```
+
+- `kernel/param.h`中添加`NVMA`宏：
+```c
+...
+#define NVMA 16
+```
+
+- `kernel/defs.h`中用条件编译包裹所有内容，防止重复引用，并增加如下函数声明：
+```c
+#ifndef XV6_KERNEL_DEFS_H
+#define XV6_KERNEL_DEFS_H
+...
+// syscall.c
+...
+void            argsize_t(int, size_t *);
+void            argoff_t(int, off_t *);
+
+// sysfile.c
+int             munmap(int, struct proc *, uint64, size_t);
+int             mmapfaulthandler(struct proc *, uint64);
+...
+#endif
+```
+
+- `kernel/proc.h`中开头引用`defs.h`，并定义`vma`结构体，在`proc`结构体中增加成员：
+```c
+#include "defs.h"
+...
+struct vma {
+  uint64 addr;
+  size_t len;
+  int prot;
+  int flags;
+  int fd;
+  off_t offset;
+  struct file *vfile;
+  int npages;
+};
+
+// Per-process state
+struct proc {
+  ...
+  struct vma pvma[NVMA];
+};
+```
+
+- `kernel/proc.c`中修改`fork`和`exit`函数：
+```c
+...
+int
+fork(void)
+{
+  ...
+  // Copy user memory from parent to child.
+  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+
+  for (int i = 0; i < NVMA; ++i) {
+    struct vma *vpp = p->pvma + i;
+    struct vma *vnp = np->pvma + i;
+    *(vnp) = *(vpp);
+    if (vpp->vfile) {
+      vnp->vfile = filedup(vpp->vfile);
+    }
+  }                              // 加上这个循环
+  ...
+}
+...
+void
+exit(int status)
+{
+  ...
+  // Close all open files.
+  for(int fd = 0; fd < NOFILE; fd++){
+    if(p->ofile[fd]){
+      struct file *f = p->ofile[fd];
+      fileclose(f);
+      p->ofile[fd] = 0;
+    }
+  }
+
+  for (int i = 0; i < NVMA; ++i) {
+    struct vma *vp = p->pvma + i;
+    if (vp->npages) {
+      munmap(i, p, vp->addr, vp->len);
+    }
+  }                              // 加上这个循环
+  ...
+}
+...
+```
+
+- `kernel/sysfile.c`中完成`sys_mmap`、`sys_munmap`系统调用和`munmap`、`mmapfaulthandler`函数以及`munmapfilewrite`函数的定义：
+```c
+...
+uint64
+sys_mmap(void)
+{
+  struct proc *p = myproc();
+  struct vma *ptvma = (void *)0;
+  for (int i = 0; i < NVMA; ++i) {
+    struct vma *vp = p->pvma + i;
+    if (vp->npages == 0) {
+      ptvma = vp;
+      break;
+    }
+  }
+  if (!ptvma) {
+    return -1;
+  }
+
+  argaddr(0, &ptvma->addr);
+  argsize_t(1, &ptvma->len);
+  argint(2, &ptvma->prot);
+  argint(3, &ptvma->flags);
+  argint(4, &ptvma->fd);
+  argoff_t(5, &ptvma->offset);
+  if (ptvma->addr || ptvma->offset) { // 题目假定为0，只处理为0的情况
+    panic("mmap: <addr> or <offset> is not 0");
+  }
+
+  p->sz = PGROUNDUP(p->sz);
+  ptvma->addr = p->sz;
+  ptvma->vfile = p->ofile[ptvma->fd];
+  if (((ptvma->prot & PROT_READ) && !((ptvma->vfile)->readable)) ||
+      ((ptvma->flags & MAP_SHARED) && (ptvma->prot & PROT_WRITE) && !((ptvma->vfile)->writable))) {
+    return ~(uint64)0;
+  }
+
+  filedup(ptvma->vfile);
+  ptvma->npages = PGROUNDUP(ptvma->len) / PGSIZE;
+  p->sz += ptvma->npages * PGSIZE;
+  return ptvma->addr;
+}
+
+uint64
+sys_munmap(void)
+{
+  uint64 addr;
+  size_t len;
+  struct proc *p = myproc();
+  struct vma *ptvma;
+  argaddr(0, &addr);
+  argsize_t(1, &len);
+  int i = 0;
+  for( ; i < NVMA; ++i) {
+    ptvma = p->pvma + i;
+    if (addr >= ptvma->addr && addr < ptvma->addr + ptvma->len) {
+      munmap(i, p, addr, len);
+      break;
+    }
+  }
+  return i < 16;
+}
+
+static int
+munmapfilewrite(struct file *f, uint64 addr, uint off, int n)
+{
+  int r;
+  int max = ((MAXOPBLOCKS - 1 - 1 - 2) / 2) * BSIZE;
+  int i = 0;
+  while (i < n) {
+    int n1 = n - i;
+    if (n1 > max) {
+      n1 = max;
+    }
+
+    begin_op();
+    ilock(f->ip);
+    if ((r = writei(f->ip, 1, addr + i, off, n1)) > 0) {
+      off += r;
+    }
+    iunlock(f->ip);
+    end_op();
+
+    if (r != n1) { // writei错误
+      break;
+    }
+    i += r;
+  }
+  return (i == n) ? n : -1;
+}
+
+int
+munmap(int i, struct proc *p, uint64 addr, size_t len)
+{
+  int do_free = 0;
+  struct vma *ptvma = p->pvma + i;
+  struct file *vfile = ptvma->vfile;
+  uint fizesize = vfile->ip->size;
+  uint64 va = addr;
+  int npages = PGROUNDUP(len) / PGSIZE;
+  int can_write = (ptvma->flags & MAP_SHARED) && (ptvma->prot & PROT_WRITE) && (vfile->writable);
+
+  for (int j = 0; j < npages; ++j) {
+    if (walkaddr(p->pagetable, va) != 0) {
+      if (can_write) {
+        int off = va - addr;
+        int n = (off + PGSIZE + ptvma->offset > fizesize) ? fizesize % PGSIZE : PGSIZE;
+        if (munmapfilewrite(vfile, va, ptvma->offset + off, n) == -1) {
+          return -1;
+        }
+      }
+      uvmunmap(p->pagetable, va, 1, do_free);
+    }
+    va += PGSIZE;
+  }
+  if (addr == ptvma->addr) {
+    ptvma->addr = va;
+    ptvma->offset += npages * PGSIZE;
+  }
+  ptvma->npages -= npages;
+  ptvma->len  -=  len;
+  if (ptvma->npages == 0) {
+    fileclose(ptvma->vfile);
+    ptvma->vfile = 0;
+  }
+  return 0;
+}
+
+int
+mmapfaulthandler(struct proc *p, uint64 scause)
+{
+  if (scause != 13 && scause != 15) {
+    return 0; // 不是需要处理的情况
+  }
+  uint64 va = r_stval();
+  va = PGROUNDDOWN(va);
+  if (va >= MAXVA) {
+    return 0; // 非法
+  }
+  int i = 0;
+  for ( ; i < NVMA; ++i) {
+    struct vma trapvma = p->pvma[i];
+    if (va >= trapvma.addr && va < trapvma.addr + trapvma.len) {
+      char *mem = (char *)kalloc();
+      memset(mem, 0, PGSIZE);
+      struct inode *ip = trapvma.vfile->ip;
+      int perm = PTE_U | ((trapvma.prot & PROT_READ) ? PTE_R : 0);
+      if (trapvma.prot & PROT_WRITE) {
+        perm |= PTE_W;
+      } else if (scause == 15) {
+        return 0; // failed
+      }
+      uint off = va - trapvma.addr + trapvma.offset;
+      ilock(ip);
+      readi(ip, 0, (uint64)mem, off, PGSIZE);
+      iunlock(ip);
+      mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm);
+      break;
+    }
+  }
+  return i != 16;
+}
+```
+
+- `kernel/trap.c`的`usertrap`中处理缺页错误：
+```c
+...
+void
+usertrap(void)
+{
+  ...
+  if(r_scause() == 8){
+    ...
+  } else if((which_dev = devintr()) != 0){
+    // ok
+  } else if (mmapfaulthandler(p, r_scause())) { // 加上这个分支，if语句块里面确实不用写东西
+    // ok
+  } else {
+  ...
+}
+...
+```
+
+- `kernel/vm.c`中改如下两个语句：
+```c
+...
+void
+uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
+{
+  ...
+  for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
+    if((pte = walk(pagetable, a, 0)) == 0)
+      panic("uvmunmap: walk");
+    if((*pte & PTE_V) == 0)
+      continue; // 将panic改为continue
+  ...
+}
+...
+int
+uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
+{
+  ...
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      continue; // 将panic改为continue
+  ...
+}
+...
+```
+
+### 测试
+
+![mmap测试结果](./img/mmap.png)
+
+至此，实验全部完成。  
