@@ -26,8 +26,6 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-void *mmap(void *, size_t, int, int, int, off_t);
-int munmap(void *, size_t);
 #ifdef LAB_NET
 int bind(uint16);
 int unbind(uint16);
@@ -38,6 +36,10 @@ int recv(uint16, uint32*, uint16*, char *, uint32);
 int ugetpid(void);
 uint64 pgpte(void*);
 void kpgtbl(void);
+#endif
+#ifdef LAB_MMAP
+void *mmap(void *, size_t, int, int, int, off_t);
+int munmap(void *, size_t);
 #endif
 
 // ulib.c

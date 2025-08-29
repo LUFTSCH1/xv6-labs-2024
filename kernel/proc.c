@@ -294,6 +294,16 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+#ifdef LAB_MMAP
+  for (int i = 0; i < NVMA; ++i) {
+    struct vma *vpp = p->pvma + i;
+    struct vma *vnp = np->pvma + i;
+    *(vnp) = *(vpp);
+    if (vpp->vfile) {
+      vnp->vfile = filedup(vpp->vfile);
+    }
+  }
+#endif
   np->sz = p->sz;
 
   // copy saved user registers.
@@ -359,7 +369,14 @@ exit(int status)
       p->ofile[fd] = 0;
     }
   }
-
+#ifdef LAB_MMAP
+  for (int i = 0; i < NVMA; ++i) {
+    struct vma *vp = p->pvma + i;
+    if (vp->npages) {
+      munmap(i, p, vp->addr, vp->len);
+    }
+  }
+#endif
   begin_op();
   iput(p->cwd);
   end_op();

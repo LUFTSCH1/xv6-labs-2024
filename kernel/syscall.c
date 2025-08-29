@@ -59,6 +59,22 @@ argint(int n, int *ip)
   *ip = argraw(n);
 }
 
+#ifdef LAB_MMAP
+void
+argsize_t(int n, size_t *ip)
+{
+  *ip = argraw(n);
+}
+#endif
+
+#ifdef LAB_MMAP
+void
+argoff_t(int n, off_t *ip)
+{
+  *ip = argraw(n);
+}
+#endif
+
 // Retrieve an argument as a pointer.
 // Doesn't check for legality, since
 // copyin/copyout will do that.
@@ -101,8 +117,10 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+#ifdef LAB_MMAP
 extern uint64 sys_mmap(void);
 extern uint64 sys_munmap(void);
+#endif
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -128,8 +146,10 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+#ifdef LAB_MMAP
 [SYS_mmap]    sys_mmap,
 [SYS_munmap]  sys_munmap
+#endif
 };
 
 void

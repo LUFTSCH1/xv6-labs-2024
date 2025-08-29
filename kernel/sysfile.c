@@ -503,3 +503,173 @@ sys_pipe(void)
   }
   return 0;
 }
+
+#ifdef LAB_MMAP
+uint64
+sys_mmap(void)
+{
+  struct proc *p = myproc();
+  struct vma *ptvma = (void *)0;
+  for (int i = 0; i < NVMA; ++i) {
+    struct vma *vp = p->pvma + i;
+    if (vp->npages == 0) {
+      ptvma = vp;
+      break;
+    }
+  }
+  if (!ptvma) {
+    return -1;
+  }
+
+  argaddr(0, &ptvma->addr);
+  argsize_t(1, &ptvma->len);
+  argint(2, &ptvma->prot);
+  argint(3, &ptvma->flags);
+  argint(4, &ptvma->fd);
+  argoff_t(5, &ptvma->offset);
+  if (ptvma->addr || ptvma->offset) { // 题目假定为0，只处理为0的情况
+    panic("mmap: <addr> or <offset> is not 0");
+  }
+
+  p->sz = PGROUNDUP(p->sz);
+  ptvma->addr = p->sz;
+  ptvma->vfile = p->ofile[ptvma->fd];
+  if (((ptvma->prot & PROT_READ) && !((ptvma->vfile)->readable)) ||
+      ((ptvma->flags & MAP_SHARED) && (ptvma->prot & PROT_WRITE) && !((ptvma->vfile)->writable))) {
+    return ~(uint64)0;
+  }
+
+  filedup(ptvma->vfile);
+  ptvma->npages = PGROUNDUP(ptvma->len) / PGSIZE;
+  p->sz += ptvma->npages * PGSIZE;
+  return ptvma->addr;
+}
+#endif
+
+#ifdef LAB_MMAP
+uint64
+sys_munmap(void)
+{
+  uint64 addr;
+  size_t len;
+  struct proc *p = myproc();
+  struct vma *ptvma;
+  argaddr(0, &addr);
+  argsize_t(1, &len);
+  int i = 0;
+  for( ; i < NVMA; ++i) {
+    ptvma = p->pvma + i;
+    if (addr >= ptvma->addr && addr < ptvma->addr + ptvma->len) {
+      munmap(i, p, addr, len);
+      break;
+    }
+  }
+  return i < 16;
+}
+#endif
+
+#ifdef LAB_MMAP
+int
+munmap_filewrite(struct file *f, uint64 addr, uint off, int n)
+{
+  int r;
+  int max = ((MAXOPBLOCKS - 1 - 1 - 2) / 2) * BSIZE;
+  int i = 0;
+  while (i < n) {
+    int n1 = n - i;
+    if (n1 > max) {
+      n1 = max;
+    }
+
+    begin_op();
+    ilock(f->ip);
+    if ((r = writei(f->ip, 1, addr + i, off, n1)) > 0) {
+      off += r;
+    }
+    iunlock(f->ip);
+    end_op();
+
+    if (r != n1) { // writei错误
+      break;
+    }
+    i += r;
+  }
+  return (i == n) ? n : -1;
+}
+#endif
+
+#ifdef LAB_MMAP
+int
+munmap(int i, struct proc *p, uint64 addr, size_t len)
+{
+  int do_free = 0;
+  struct vma *ptvma = p->pvma + i;
+  struct file *vfile = ptvma->vfile;
+  uint fizesize = vfile->ip->size;
+  uint64 va = addr;
+  int npages = PGROUNDUP(len) / PGSIZE;
+  int can_write = (ptvma->flags & MAP_SHARED) && (ptvma->prot & PROT_WRITE) && (vfile->writable);
+
+  for (int j = 0; j < npages; ++j) {
+    if (walkaddr(p->pagetable, va) != 0) {
+      if (can_write) {
+        int off = va - addr;
+        int n = (off + PGSIZE + ptvma->offset > fizesize) ? fizesize % PGSIZE : PGSIZE;
+        if (munmap_filewrite(vfile, va, ptvma->offset + off, n) == -1) {
+          return -1;
+        }
+      }
+      uvmunmap(p->pagetable, va, 1, do_free);
+    }
+    va += PGSIZE;
+  }
+  if (addr == ptvma->addr) {
+    ptvma->addr = va;
+    ptvma->offset += npages * PGSIZE;
+  }
+  ptvma->npages -= npages;
+  ptvma->len  -=  len;
+  if (ptvma->npages == 0) {
+    fileclose(ptvma->vfile);
+    ptvma->vfile = 0;
+  }
+  return 0;
+}
+#endif
+
+#ifdef LAB_MMAP
+int
+mmapfaulthandler(struct proc *p, uint64 scause)
+{
+  if (scause != 13 && scause != 15) {
+    return 0; // 不是需要处理的情况
+  }
+  uint64 va = r_stval();
+  va = PGROUNDDOWN(va);
+  if (va >= MAXVA) {
+    return 0; // 非法
+  }
+  int i = 0;
+  for ( ; i < NVMA; ++i) {
+    struct vma trapvma = p->pvma[i];
+    if (va >= trapvma.addr && va < trapvma.addr + trapvma.len) {
+      char *mem = (char *)kalloc();
+      memset(mem, 0, PGSIZE);
+      struct inode *ip = trapvma.vfile->ip;
+      int perm = PTE_U | ((trapvma.prot & PROT_READ) ? PTE_R : 0);
+      if (trapvma.prot & PROT_WRITE) {
+        perm |= PTE_W;
+      } else if (scause == 15) {
+        return 0; // failed
+      }
+      uint off = va - trapvma.addr + trapvma.offset;
+      ilock(ip);
+      readi(ip, 0, (uint64)mem, off, PGSIZE);
+      iunlock(ip);
+      mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm);
+      break;
+    }
+  }
+  return i != 16;
+}
+#endif

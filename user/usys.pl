@@ -36,5 +36,7 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+print "#ifdef LAB_MMAP\n";
 entry("mmap");
 entry("munmap");
+print "#endif\n";

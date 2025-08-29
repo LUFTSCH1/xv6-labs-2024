@@ -1,3 +1,5 @@
+#ifndef XV6_KERNEL_DEFS_H
+#define XV6_KERNEL_DEFS_H
 #ifdef LAB_MMAP
 typedef unsigned long size_t;
 typedef long int off_t;
@@ -148,6 +150,16 @@ void            argaddr(int, uint64 *);
 int             fetchstr(uint64, char*, int);
 int             fetchaddr(uint64, uint64*);
 void            syscall();
+#ifdef LAB_MMAP
+void            argsize_t(int, size_t *);
+void            argoff_t(int, off_t *);
+#endif
+
+#ifdef LAB_MMAP
+// sysfile.c
+int             munmap(int, struct proc *, uint64, size_t);
+int             mmapfaulthandler(struct proc *, uint64);
+#endif
 
 // trap.c
 extern uint     ticks;
@@ -235,5 +247,7 @@ int             e1000_transmit(char *, int);
 // net.c
 void            netinit(void);
 void            net_rx(char *buf, int len);
+
+#endif
 
 #endif
