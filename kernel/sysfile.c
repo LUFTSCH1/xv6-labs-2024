@@ -569,8 +569,8 @@ sys_munmap(void)
 #endif
 
 #ifdef LAB_MMAP
-int
-munmap_filewrite(struct file *f, uint64 addr, uint off, int n)
+static int
+munmapfilewrite(struct file *f, uint64 addr, uint off, int n)
 {
   int r;
   int max = ((MAXOPBLOCKS - 1 - 1 - 2) / 2) * BSIZE;
@@ -615,7 +615,7 @@ munmap(int i, struct proc *p, uint64 addr, size_t len)
       if (can_write) {
         int off = va - addr;
         int n = (off + PGSIZE + ptvma->offset > fizesize) ? fizesize % PGSIZE : PGSIZE;
-        if (munmap_filewrite(vfile, va, ptvma->offset + off, n) == -1) {
+        if (munmapfilewrite(vfile, va, ptvma->offset + off, n) == -1) {
           return -1;
         }
       }
